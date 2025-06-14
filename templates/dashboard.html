@@ -1,0 +1,124 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+    .stats-flex {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        justify-content: center;
+        margin-top: 5%;
+        margin-bottom: 24px;
+    }
+    .stat-card {
+        background: #f0f4f8;
+        border-radius: 10px;
+        box-shadow: 0 1px 6px #e3e3e3;
+        padding: 24px 30px;
+        min-width: 170px;
+        text-align: center;
+        flex: 1 1 170px;
+        max-width: 220px;
+    }
+    .stat-card h3 {
+        margin: 0 0 8px 0;
+        font-size: 1.1em;
+        color: #2980b9;
+    }
+    .stat-card .stat-value {
+        font-size: 2em;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .sections-flex {
+        display: flex;
+        gap: 24px;
+        justify-content: center;
+        margin-bottom: 32px;
+    }
+    .section-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px #e3e3e3;
+        padding: 24px 20px;
+        flex: 1 1 0;
+        min-width: 280px;
+        max-width: 400px;
+        max-height: 320px;
+        overflow-y: auto;
+    }
+    .section-card ul {
+        max-height: 200px;
+        overflow-y: auto;
+        padding-right: 8px;
+    }
+    @media (max-width: 1100px) {
+        .sections-flex {
+            flex-direction: column;
+            align-items: center;
+        }
+        .section-card {
+            max-width: 98vw;
+        }
+    }
+    @media (max-width: 900px) {
+        .stats-flex {
+            flex-direction: column;
+            align-items: center;
+        }
+        .stat-card {
+            max-width: 98vw;
+        }
+    }
+</style>
+
+<!-- Dashboard Content -->
+<div class="stats-flex">
+    <div class="stat-card">
+        <h3>Active OTs</h3>
+        <div class="stat-value">{{ stats.active_ots }}</div>
+    </div>
+    <div class="stat-card">
+        <h3>Critical Blood Types</h3>
+        <div class="stat-value">{{ stats.critical_blood }}</div>
+    </div>
+    <div class="stat-card">
+        <h3>Patients in Queue</h3>
+        <div class="stat-value">{{ stats.patients_in_queue }}</div>
+    </div>
+    <div class="stat-card">
+        <h3>Low Stock Drugs</h3>
+        <div class="stat-value">{{ stats.low_stock_drugs }}</div>
+    </div>
+</div>
+
+<div class="sections-flex">
+    <div class="section-card">
+        <h2>🚨 Critical Alerts</h2>
+        <ul>
+            {% for alert in alerts %}
+            <li>{{ alert }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="section-card">
+        <h2>🔔 Notifications</h2>
+        <ul>
+            {% for n in notifications %}
+            <li>{{ n.message }} <span style="color:#888;">({{ n.status }})</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="section-card">
+        <h2>📋 Recent Activity</h2>
+        <ul>
+            {% for activity in activity_log %}
+            <li>{{ activity }}</li>
+            {% endfor %}
+        </ul>
+        <form method="post" action="{{ url_for('add_activity') }}">
+            <input type="text" name="activity" placeholder="Add activity" required>
+            <button type="submit">Add</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

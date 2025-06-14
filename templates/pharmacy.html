@@ -1,0 +1,334 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+    /* ... (Your existing CSS styles, no changes needed here unless you want to adjust layout) ... */
+    .pharmacy-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px #e3e3e3;
+        padding: 32px 36px;
+        max-width: 900px;
+        margin: 40px auto;
+    }
+    .pharmacy-card h1 {
+        color: #2980b9;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .form-group { /* Grouping for forms */
+        margin-bottom: 30px;
+        padding: 20px;
+        border: 1px solid #eee;
+        border-radius: 8px;
+        background-color: #fcfcfc;
+    }
+    .form-group h3 {
+        width: 100%;
+        text-align: center;
+        color: #34495e;
+        margin-top: 0;
+        margin-bottom: 15px;
+    }
+    /* Adjusted form styling for better alignment, especially with search */
+    .pharmacy-card form { 
+        display: flex;
+        flex-wrap: wrap; /* Allow items to wrap */
+        align-items: center;
+        gap: 10px; /* Space between form elements */
+        margin-bottom: 15px;
+    }
+    .pharmacy-card form.single-line-form { /* For forms that should stay on one line */
+        justify-content: center;
+    }
+
+    .pharmacy-card form:last-of-type {
+        margin-bottom: 0;
+    }
+    .pharmacy-card label {
+        font-weight: bold;
+        color: #555;
+        flex-shrink: 0; /* Prevent labels from shrinking */
+    }
+    .pharmacy-card select, 
+    .pharmacy-card input[type="number"], 
+    .pharmacy-card input[type="text"],
+    .pharmacy-card input[type="search"] { /* Added type="search" */
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 1em;
+        flex-grow: 1; /* Allow inputs to grow */
+        min-width: 120px; /* Minimum width for inputs */
+    }
+    /* Specific width for number inputs if needed, can override flex-grow */
+    .pharmacy-card input[type="number"] {
+        max-width: 80px; 
+    }
+
+    .pharmacy-card button, .pharmacy-card .btn-link {
+        background: #2980b9;
+        color: #fff !important;
+        border: none;
+        padding: 8px 18px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        text-decoration: none;
+        margin-left: 8px; /* Default margin for buttons not within new flex forms */
+        transition: background 0.2s;
+        display: inline-block;
+        flex-shrink: 0; /* Prevent buttons from shrinking */
+    }
+    .pharmacy-card button:hover, .pharmacy-card .btn-link:hover {
+        background: #c0392b; /* A standard hover color */
+        color: #fff !important;
+    }
+    /* Override margin-left for buttons within flex forms if they need to be part of gap */
+    .pharmacy-card form button {
+        margin-left: 0; 
+    }
+
+    .pharmacy-card table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .pharmacy-card th, .pharmacy-card td {
+        border: 1px solid #e1e1e1;
+        padding: 10px 12px;
+        text-align: left;
+    }
+    .pharmacy-card th {
+        background: #f0f4f8;
+        color: #333;
+    }
+    .pharmacy-card tr:nth-child(even) {
+        background: #f9f9f9;
+    }
+    .pharmacy-card tr:hover {
+        background: #eaf1fb;
+        transition: background 0.2s;
+    }
+    .pharmacy-card .back-link {
+        display: inline-block;
+        margin-top: 10px;
+        color: #555;
+        text-decoration: none;
+        font-size: 1em;
+        background: #f0f4f8;
+        padding: 6px 16px;
+        border-radius: 4px;
+        transition: background 0.2s, color 0.2s;
+    }
+    .pharmacy-card .back-link:hover {
+        color: #fff;
+        background: #2980b9;
+        text-decoration: none;
+    }
+    .pharmacy-card .low-stock {
+        color: #c0392b;
+        font-weight: bold;
+    }
+    .pharmacy-card .sufficient {
+        color: #27ae60;
+        font-weight: bold;
+    }
+    /* Styles for search bar */
+    .search-form {
+        margin-bottom: 25px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #fefefe;
+    }
+    .search-form input[type="search"] {
+        flex-grow: 1; 
+        max-width: 400px;
+        padding: 10px 15px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+    }
+    .search-form button {
+        margin-left: 0;
+        background: #3498db; 
+    }
+    .search-form button:hover {
+        background: #2980b9;
+    }
+</style>
+
+<div class="pharmacy-card">
+    <h1>💊 Pharmacy Inventory</h1>
+
+    <div class="form-group search-form">
+        <label for="search_query_live">Search Inventory:</label>
+        <input type="search" id="search_query_live" name="search_query_live" 
+               placeholder="Filter by medicine name..." 
+               value="">
+    </div>
+
+    <div class="form-group">
+        <h3>Manage Existing Stock</h3>
+        <form method="post" action="{{ url_for('add_specific_drug_stock') }}">
+            <label for="drug_search_add_units">Search Medicine:</label>
+            <input type="text" id="drug_search_add_units" list="drugs_datalist_add_units" 
+                   placeholder="Start typing medicine name..." autocomplete="off" required>
+            
+            <datalist id="drugs_datalist_add_units">
+                </datalist>
+
+            <input type="hidden" id="drug_id_hidden_add_units" name="drug_id" required>
+            
+            <label for="units_to_add">Qty:</label>
+            <input type="number" id="units_to_add" name="units_to_add" min="1" value="1" required>
+            
+            <button type="submit">Add Units</button>
+        </form>
+
+        <form method="post" action="{{ url_for('pharmacy') }}" class="single-line-form">
+            <button type="submit" name="restock_out_of_stock">Restock All Out of Stock Drugs</button>
+        </form>
+    </div>
+
+    <h2>Drug Inventory Overview</h2>
+    {% if drug_inventory %}
+        <table id="inventory_table">
+            <thead>
+                <tr>
+                    <th>ID</th><th>Name</th><th>Stock</th><th>Reorder Level</th><th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for drug_id, data in drug_inventory.items() %}
+                <tr>
+                    <td>{{ drug_id }}</td>
+                    <td class="drug-name">{{ data.name }}</td>
+                    <td>{{ data.stock }}</td>
+                    <td>{{ data.reorder }}</td>
+                    <td class="{% if data.status in ['Low Stock', 'Out of Stock'] %}low-stock{% else %}sufficient{% endif %}">
+                        {{ data.status }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p id="no_drugs_message">No drugs found. Add a new medicine to the inventory!</p>
+    {% endif %}
+
+    <div class="action-buttons">
+        <a class="btn-link" href="{{ url_for('generate_drug_order') }}">Generate Order List</a>
+        <a class="btn-link" href="{{ url_for('drug_low_stock_alert') }}">Send Low Stock Alert</a>
+        <a class="btn-link" href="{{ url_for('issue_drug') }}" style="background: #3498db;">Issue Medicine</a> 
+    </div>
+    
+    <a class="back-link" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- Live Table Filtering (for "row-wise" display) ---
+        const liveSearchInput = document.getElementById('search_query_live');
+        const inventoryTableBody = document.querySelector('#inventory_table tbody');
+        const noDrugsMessage = document.getElementById('no_drugs_message');
+
+        if (liveSearchInput && inventoryTableBody) {
+            liveSearchInput.addEventListener('keyup', function() {
+                const filter = this.value.toLowerCase();
+                const rows = inventoryTableBody.querySelectorAll('tr');
+                let foundMatch = false;
+
+                rows.forEach(row => {
+                    const drugNameCell = row.querySelector('.drug-name');
+                    if (drugNameCell) {
+                        const name = drugNameCell.textContent.toLowerCase();
+                        if (name.includes(filter)) {
+                            row.style.display = '';
+                            foundMatch = true;
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    }
+                });
+
+                if (noDrugsMessage) {
+                    if (foundMatch || filter === '') {
+                        noDrugsMessage.style.display = 'none';
+                    } else {
+                        noDrugsMessage.style.display = 'block';
+                        noDrugsMessage.textContent = `No drugs found matching "${this.value}".`;
+                    }
+                }
+            });
+        }
+        
+        // --- AJAX Search for "Add Units" (existing functionality) ---
+        const drugSearchInput = document.getElementById('drug_search_add_units');
+        const drugsDatalist = document.getElementById('drugs_datalist_add_units');
+        const drugIdHiddenInput = document.getElementById('drug_id_hidden_add_units');
+
+        let typingTimer; 
+        const doneTypingInterval = 300; 
+
+        async function fetchDrugsAndPopulateDatalist(query) {
+            if (query.length < 2) { 
+                drugsDatalist.innerHTML = ''; 
+                drugIdHiddenInput.value = ''; 
+                return;
+            }
+
+            try {
+                const response = await fetch(`/search_drugs?q=${encodeURIComponent(query)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const availableDrugs = await response.json(); 
+                
+                drugsDatalist.innerHTML = ''; 
+                availableDrugs.forEach(drug => {
+                    const option = document.createElement('option');
+                    option.value = drug.name; 
+                    option.setAttribute('data-id', drug.id); 
+                    drugsDatalist.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error fetching drugs for Add Units:', error);
+                drugsDatalist.innerHTML = '<option value="Error loading suggestions"></option>';
+            }
+        }
+
+        drugSearchInput.addEventListener('input', function() {
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                fetchDrugsAndPopulateDatalist(this.value);
+            }, doneTypingInterval);
+        });
+
+        drugSearchInput.addEventListener('change', function() {
+            const selectedName = this.value;
+            const options = drugsDatalist.querySelectorAll('option');
+            let foundId = '';
+            for (const option of options) {
+                if (option.value === selectedName) {
+                    foundId = option.getAttribute('data-id');
+                    break;
+                }
+            }
+
+            if (foundId) {
+                drugIdHiddenInput.value = foundId;
+            } else {
+                drugIdHiddenInput.value = ''; 
+            }
+        });
+
+        drugIdHiddenInput.value = '';
+    });
+</script>
+{% endblock %}

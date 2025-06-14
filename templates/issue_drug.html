@@ -1,0 +1,208 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+    /* Your existing CSS for layout, forms, tables, etc. */
+    .issue-drug-card, .add-medicine-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px #e3e3e3;
+        padding: 32px 36px;
+        max-width: 900px;
+        margin: 40px auto;
+    }
+    .issue-drug-card h1, .add-medicine-card h1 {
+        color: #2980b9;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .form-group {
+        margin-bottom: 30px;
+        padding: 20px;
+        border: 1px solid #eee;
+        border-radius: 8px;
+        background-color: #fcfcfc;
+    }
+    .form-group h3 {
+        width: 100%;
+        text-align: center;
+        color: #34495e;
+        margin-top: 0;
+        margin-bottom: 15px;
+    }
+    .issue-drug-card form, .add-medicine-card form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+        justify-content: center; /* Center forms */
+    }
+    .issue-drug-card label, .add-medicine-card label {
+        font-weight: bold;
+        color: #555;
+        flex-shrink: 0;
+    }
+    .issue-drug-card input[type="number"], 
+    .issue-drug-card input[type="text"],
+    .add-medicine-card input[type="number"], 
+    .add-medicine-card input[type="text"] {
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 1em;
+        flex-grow: 1;
+        min-width: 120px;
+    }
+    .issue-drug-card input[type="number"], .add-medicine-card input[type="number"] {
+        max-width: 80px;
+    }
+    .issue-drug-card button, .add-medicine-card button, .issue-drug-card .btn-link {
+        background: #2980b9;
+        color: #fff !important;
+        border: none;
+        padding: 8px 18px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        text-decoration: none;
+        margin-left: 8px;
+        transition: background 0.2s;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+    .issue-drug-card button:hover, .add-medicine-card button:hover, .issue-drug-card .btn-link:hover {
+        background: #c0392b;
+        color: #fff !important;
+    }
+    .issue-drug-card .back-link, .add-medicine-card .back-link {
+        display: inline-block;
+        margin-top: 10px;
+        color: #555;
+        text-decoration: none;
+        font-size: 1em;
+        background: #f0f4f8;
+        padding: 6px 16px;
+        border-radius: 4px;
+        transition: background 0.2s, color 0.2s;
+    }
+    .issue-drug-card .back-link:hover, .add-medicine-card .back-link:hover {
+        color: #fff;
+        background: #2980b9;
+        text-decoration: none;
+    }
+</style>
+
+<div class="issue-drug-card">
+    <h1>📤 Issue Medicine</h1>
+<div class="form-group">
+        <h3>Add New Medicine to Inventory</h3>
+        <form method="post" action="{{ url_for('add_medicine') }}">
+            <label for="medicine_name">Name:</label>
+            <input type="text" id="medicine_name" name="name" required placeholder="e.g., Aspirin 100mg">
+            
+            <label for="initial_stock">Stock:</label>
+            <input type="number" id="initial_stock" name="stock" min="0" value="0" required>
+            
+            <label for="reorder_level">Reorder:</label>
+            <input type="number" id="reorder_level" name="reorder_level" min="0" value="10" required>
+            
+            <button type="submit">Add Medicine</button>
+        </form>
+    </div>
+    <div class="form-group">
+        <h3>Issue Medicine from Stock</h3>
+        <form method="post" action="{{ url_for('issue_drug') }}">
+            <label for="drug_name_input">Medicine Name:</label>
+            <input type="text" id="drug_name_input" list="drugs_datalist" 
+                   placeholder="Start typing medicine name..." autocomplete="off" required>
+            
+            <datalist id="drugs_datalist">
+                </datalist>
+
+            <input type="hidden" id="drug_id_hidden" name="drug_id_hidden" required>
+            
+            <label for="quantity">Quantity:</label>
+            <input type="number" id="quantity" name="quantity" min="1" value="1" required>
+            
+            <button type="submit">Issue Drug</button>
+        </form>
+    </div>
+
+    <a class="back-link" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const drugNameInput = document.getElementById('drug_name_input');
+        const drugsDatalist = document.getElementById('drugs_datalist');
+        const drugIdHiddenInput = document.getElementById('drug_id_hidden');
+
+        let typingTimer; 
+        const doneTypingInterval = 300; // 0.3 seconds
+
+        // Function to fetch and display drugs for the "Issue Medicine" search
+        async function fetchDrugsAndPopulateDatalist(query) {
+            if (query.length < 2) { // Only search if query has at least 2 characters
+                drugsDatalist.innerHTML = ''; 
+                drugIdHiddenInput.value = ''; // Clear hidden ID if search query is too short
+                return;
+            }
+
+            try {
+                const response = await fetch(`/search_drugs?q=${encodeURIComponent(query)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const availableDrugs = await response.json(); 
+                
+                drugsDatalist.innerHTML = ''; 
+                availableDrugs.forEach(drug => {
+                    const option = document.createElement('option');
+                    option.value = `${drug.name} (Stock: ${drug.stock})`; // Display name and stock
+                    option.setAttribute('data-id', drug.id); // Store the ID
+                    option.setAttribute('data-stock', drug.stock); // Store stock for potential client-side validation
+                    drugsDatalist.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error fetching drugs for Issue Medicine:', error);
+                drugsDatalist.innerHTML = '<option value="Error loading drugs"></option>';
+            }
+        }
+
+        // 1. Listen for user typing in the search box (debounced)
+        drugNameInput.addEventListener('input', function() {
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                fetchDrugsAndPopulateDatalist(this.value);
+            }, doneTypingInterval);
+        });
+
+        // 2. Listen for when a user selects an item from the datalist (or types it exactly)
+        drugNameInput.addEventListener('change', function() {
+            const selectedValue = this.value; // e.g., "Aspirin (Stock: 100)"
+            
+            // Find the corresponding option in the datalist to get its data-id
+            const options = drugsDatalist.querySelectorAll('option');
+            let foundId = '';
+            for (const option of options) {
+                if (option.value === selectedValue) {
+                    foundId = option.getAttribute('data-id');
+                    break;
+                }
+            }
+
+            if (foundId) {
+                drugIdHiddenInput.value = foundId;
+            } else {
+                drugIdHiddenInput.value = ''; // Clear hidden ID if no valid selection
+                // Optionally, clear the input field if no match found
+                // drugNameInput.value = ''; 
+                // flash a message to the user that they must select from the list
+            }
+        });
+
+        // Ensure hidden ID is cleared on page load
+        drugIdHiddenInput.value = '';
+    });
+</script>
+{% endblock %}

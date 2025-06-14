@@ -1,0 +1,13 @@
+<table>
+    <tr>
+        <th>Token No</th><th>Patient</th><th>Surgeon</th><th>Time</th>
+    </tr>
+    {% for token in ot_tokens %}
+    <tr>
+        <td>{{ token.token_number }}</td>
+        <td>{{ token.patient_name }}</td>
+        <td>{{ token.doctor_or_surgeon }}</td>
+        <td>{{ token.scheduled_time }}</td>
+    </tr>
+    {% endfor %}
+</table>

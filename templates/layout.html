@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wenlock Hospital</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+        header {
+            background: #2980b9;
+            color: white;
+            padding: 16px;
+            font-size: 1.5rem;
+            text-align: center;
+            position: fixed;
+            width: 100%;
+            z-index: 1000;
+        }
+        .sidebar {
+            width: 220px;
+            background: #f0f4f8;
+            padding-top: 80px;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            overflow-y: auto;
+            border-right: 1px solid #ccc;
+        }
+        .sidebar a {
+            display: block;
+            padding: 12px 18px;
+            text-decoration: none;
+            color: #2c3e50;
+            font-weight: bold;
+            border-bottom: 1px solid #e1e1e1;
+        }
+        .sidebar a:hover {
+            background: #d0e4f5;
+        }
+        .main-content {
+            margin-left: 220px;
+            margin-top: 80px;
+            padding: 20px;
+            width: calc(100% - 220px);
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <header>🏥 Wenlock Hospital</header>
+    <div class="sidebar">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('emergency') }}">Emergency</a>
+        <a href="{{ url_for('ot') }}">OT Management</a>
+        <a href="{{ url_for('blood') }}">Blood Bank</a>
+        <a href="{{ url_for('pharmacy') }}">Pharmacy</a>
+        <a href="{{ url_for('display') }}">Display</a>
+        <a href="{{ url_for('notification_center') }}">Notifications</a>
+        <a href="{{ url_for('reports') }}">Reports</a>
+    </div>
+    <div class="main-content">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

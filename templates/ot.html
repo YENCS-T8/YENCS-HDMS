@@ -1,0 +1,397 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<style>
+    body {
+        background: #f3f6fb;
+        font-family: 'Segoe UI', sans-serif;
+        margin: 0;
+    }
+
+    .container {
+        max-width: 1100px;
+        margin: 40px auto;
+        padding: 30px;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+    }
+
+    h1, h2, h3 {
+        text-align: center;
+        color: #2c3e50;
+        margin-bottom: 20px;
+    }
+
+    /* === Tabs === */
+    .tabs {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin: 25px 0;
+    }
+
+    .tabs button {
+        background: #ecf0f1;
+        color: #2c3e50;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 20px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+
+    .tabs button:hover {
+        background: #3498db;
+        color: white;
+    }
+
+    /* === Form Styling === */
+    form {
+        display: flex;
+        gap: 5%;
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        margin-bottom: 30px;
+    }
+
+    form h3 {
+        margin-bottom: 16px;
+        font-size: 18px;
+        color: #2c3e50;
+    }
+    .sche{
+        display: flex;
+    }
+
+    form input,
+    form select,
+    form textarea,
+    form button {
+        width: 100%;
+        padding: 10px 14px;
+        margin-bottom: 15px;
+        font-size: 15px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        font-family: inherit;
+        transition: border 0.3s ease, box-shadow 0.2s ease;
+    }
+
+    form input:focus,
+    form select:focus,
+    form textarea:focus {
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+        outline: none;
+        background: white;
+    }
+
+    form button {
+        background: #3498db;
+        color: white;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+
+    form button:hover {
+        background: #2980b9;
+    }
+
+    /* === Table Styling === */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        margin-top: 20px;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+
+    th, td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #eee;
+        text-align: left;
+        font-size: 14.5px;
+    }
+
+    th {
+        background: #f0f4f8;
+        color: #34495e;
+        font-weight: 600;
+    }
+
+    tr:hover {
+        background: #f9fcff;
+    }
+
+    /* === Token Badge === */
+    .status-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: 600;
+        color: white;
+        display: inline-block;
+        font-size: 13px;
+    }
+    .sched{
+        flex-direction: column;
+    }
+    .sched input, .sched textarea {
+        width: 100%;
+        max-height: 30px;
+    }
+
+    .status-completed { background: #2ecc71; }
+    .status-progress { background: #f39c12; }
+    .status-waiting { background: #95a5a6; }
+
+    /* === Action Links === */
+    .action-links {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    /* === Popup Token Display === */
+    #current-token-popup {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #2c3e50;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-size: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+    }
+
+    /* === Links & Buttons === */
+    .btn-link, .back-link {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        background: #ecf0f1;
+        color: #2c3e50;
+        text-decoration: none;
+        transition: background 0.3s ease;
+    }
+
+    .btn-link:hover, .back-link:hover {
+        background: #3498db;
+        color: #fff;
+    }
+
+    /* === Responsive Layout === */
+    @media (max-width: 768px) {
+        .container {
+            padding: 20px;
+            margin: 10px;
+        }
+
+        .tabs {
+            flex-direction: column;
+            align-items: center;
+        }
+
+        form {
+            padding: 16px;
+        }
+
+        table, thead, tbody, th, td, tr {
+            display: block;
+        }
+
+        tr {
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        td {
+            padding-left: 50%;
+            position: relative;
+        }
+
+        td:before {
+            position: absolute;
+            left: 16px;
+            top: 12px;
+            white-space: nowrap;
+            font-weight: bold;
+            color: #555;
+        }
+
+        td:nth-of-type(1):before { content: "Token"; }
+        td:nth-of-type(2):before { content: "Patient"; }
+        td:nth-of-type(3):before { content: "Surgeon"; }
+        td:nth-of-type(4):before { content: "Time"; }
+        td:nth-of-type(5):before { content: "Status"; }
+        td:nth-of-type(6):before { content: "Action"; }
+    }
+</style>
+
+
+<div id="current-token-popup">
+    Current Token: 
+    <span id="current-token">
+        {{ current_token.token_number if current_token else '-' }}
+    </span>
+</div>
+
+<div class="container">
+    <h1>🏥 Operation Theatre (OT) Management</h1>
+
+    <form method="post" action="/add_ot_patient">
+        <input name="patient_name" placeholder="Patient Name" required>
+        <input name="surgeon" placeholder="Surgeon" required>
+        <input type="datetime-local" name="scheduled_time" required>
+        <button type="submit">Add to OT Queue</button>
+    </form>
+
+    <form method="POST" action="{{ url_for('schedule_ot') }}" class="bg-white p-4 rounded shadow-md sched">
+  <!-- <h3 class="text-lg font-semibold mb-4">Schedule OT</h3> -->
+  <div class="sche">
+    <input type="text" name="patient_name" placeholder="Patient Name" required class="form-input">
+    <input type="text" name="surgeon_name" placeholder="Surgeon Name" required class="form-input">
+    <input type="date" name="scheduled_date" required class="form-input">
+    <input type="time" name="scheduled_time" required class="form-input">
+    <textarea name="description" placeholder="Procedure Description" class="form-input md:col-span-2"></textarea>
+  </div>
+  <button type="submit" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded">Schedule</button>
+</form>
+
+
+    <div class="tabs">
+        <button onclick="showTab('ot-schedule')">🗓 OT Schedule</button>
+        <button onclick="showTab('token-queue')">📋 Token Queue</button>
+    </div>
+
+<div id="ot-schedule">
+  <h3 class="text-lg font-semibold mt-8 mb-2">Scheduled OT Procedures</h3>
+  <table class="min-w-full bg-white shadow rounded-md">
+    <thead class="bg-gray-200 text-gray-700">
+      <tr>
+        <th class="py-2 px-4 text-left">Patient</th>
+        <th class="py-2 px-4 text-left">Surgeon</th>
+        <th class="py-2 px-4 text-left">Date</th>
+        <th class="py-2 px-4 text-left">Time</th>
+        <th class="py-2 px-4 text-left">Status</th>
+        <th class="py-2 px-4 text-left">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ot in ot_schedule %}
+      <tr class="border-t hover:bg-gray-50 transition">
+        <td class="py-2 px-4">{{ ot.patient_name }}</td>
+        <td class="py-2 px-4">{{ ot.surgeon_name }}</td>
+        <td class="py-2 px-4">{{ ot.scheduled_date }}</td>
+        <td class="py-2 px-4">{{ ot.scheduled_time }}</td>
+        <td class="py-2 px-4">
+          <span class="status-badge
+              {% if ot.status == 'Completed' %}status-completed
+              {% elif ot.status == 'In Progress' %}status-progress
+              {% else %}status-waiting{% endif %}">
+              {{ ot.status or 'Waiting' }}
+          </span>
+        </td>
+        <td class="py-2 px-4">
+        {% if ot.status == 'Completed' %}
+            <span style="color: green; font-weight: bold;">✔️ Done</span>
+        {% else %}
+            <form method="POST" action="{{ url_for('update_ot_status', schedule_id=ot.id) }}">
+                    <select name="new_status">
+                    <option value="Waiting" {% if ot.status == 'Waiting' %}selected{% endif %}>Waiting</option>
+                    <option value="In Progress" {% if ot.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                    <option value="Completed" {% if ot.status == 'Completed' %}selected{% endif %}>Completed</option>
+                    </select>
+                    <button type="submit" class="mt-1 bg-blue-500 text-white px-3 py-1 rounded text-sm">Update</button>
+                </form>
+        {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+
+
+    <div id="token-queue" style="display: none;">
+        <h2>📋 OT Token Queue</h2>
+        <p><strong>Total Tokens:</strong> {{ ot_tokens|length }}</p>
+
+        <table>
+            <tr>
+                <th>Token</th><th>Patient</th><th>Surgeon</th><th>Scheduled Time</th><th>Status</th><th>Action</th>
+            </tr>
+            {% for token in ot_tokens %}
+<tr>
+    <td>{{ token.token_number }}</td>
+    <td>{{ token.patient_name }}</td>
+    <td>{{ token.doctor_or_surgeon }}</td>
+    <td>{{ token.scheduled_time }}</td>
+    <td>
+        <span style="padding: 4px 10px; border-radius: 12px; font-weight: 600;
+                background: {% if token.status == 'Completed' %}#27ae60
+                            {% elif token.status == 'In Progress' %}#f39c12
+                            {% else %}#95a5a6{% endif %};
+                color: white;">
+            {{ token.status or 'Waiting' }}
+        </span>
+    </td>
+    <td class="action-links">
+  {% if token.status == 'Completed' %}
+    <span style="color: green; font-weight: 600;">✔️ Done</span>
+  {% else %}
+    <form method="POST" action="{{ url_for('update_token_status', token_number=token.token_number) }}" style="max-height: 70px;">
+      <select name="new_status">
+        <option value="Completed">Completed</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Waiting">Waiting</option>
+      </select>
+      <button type="submit" class="mt-1 bg-blue-500 text-white px-3 py-1 rounded text-sm">
+        Update
+      </button>
+    </form>
+  {% endif %}
+</td>
+
+</tr>
+{% endfor %}
+
+        </table>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <a class="btn-link" href="{{ url_for('emergency_block_ot') }}">🚨 Emergency Block OT</a>
+        <a class="back-link" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+    </div>
+</div>
+
+<script>
+    function showTab(tabId) {
+        document.getElementById("ot-schedule").style.display = (tabId === 'ot-schedule') ? 'block' : 'none';
+        document.getElementById("token-queue").style.display = (tabId === 'token-queue') ? 'block' : 'none';
+    }
+
+    // Optional live update:
+    // function fetchTokens() {
+    //     fetch("/get_ot_tokens")
+    //         .then(response => response.text())
+    //         .then(html => {
+    //             document.getElementById('token-queue').innerHTML = html;
+    //         });
+    // }
+    // setInterval(fetchTokens, 5000);
+</script>
+{% endblock %}

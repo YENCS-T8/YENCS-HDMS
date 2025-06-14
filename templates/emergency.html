@@ -1,0 +1,150 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+    .emergency-card {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        padding: 24px;
+        max-width: 700px;
+        margin: 0 auto;
+    }
+    .emergency-card h1 {
+        color: #e74c3c;
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+    }
+    .emergency-card select, .emergency-card input[type="text"] {
+        padding: 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        font-size: 1rem;
+    }
+    .emergency-card button {
+        padding: 10px 14px;
+        background-color: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    .btn-add {
+        background-color: #2ecc71;
+        border: none;
+        color: white;
+        padding: 6px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-left: 8px;
+    }
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 10;
+        left: 0; top: 0;
+        width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+    }
+    .modal-content {
+        background-color: #fff;
+        margin: 10% auto;
+        padding: 20px;
+        width: 90%;
+        max-width: 400px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    form{
+        width: 90%;
+    }
+    .close {
+        float: right;
+        font-size: 20px;
+        cursor: pointer;
+    }
+    .sel{
+        margin-top:4%;
+    }
+    .btn {
+        text-align: center;
+    }
+</style>
+
+<div class="emergency-card">
+    <h1>🚨 Emergency Management</h1>
+
+    <!-- Form to trigger emergency -->
+    <form method="post">
+        <label for="code">Trigger Emergency Code:</label>
+        <div class="sel" style="display: flex; align-items: center;">
+            <select id="code" name="code" required style="flex: 1;">
+                <option value="">-- Select Emergency Code --</option>
+                {% for c in code_definitions %}
+                <option value="{{ c.code_name }}" data-color="{{ c.color }}">
+                    {{ c.code_name }} – {{ c.description }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="button" class="btn-add" onclick="openModal()">+</button>
+        </div>
+
+        <input type="hidden" name="color" id="color">
+        <div class="btn">
+            <button type="submit">Trigger</button>
+        </div>
+    </form>
+
+    <h2>Active Alerts</h2>
+    <ul>
+        {% for alert in emergency_alerts %}
+        <li>
+            <span style="color: {{ alert.color }}">
+                <strong>{{ alert.code }}</strong> ({{ alert.status }}) – {{ alert.time }}
+            </span>
+            {% if alert.status == 'Active' %}
+                <a class="btn-link" href="{{ url_for('clear_emergency', alert_id=alert.id) }}">Clear</a>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+
+    <a class="back-link" href="{{ url_for('dashboard') }}">&#8592; Back to Dashboard</a>
+</div>
+
+<!-- Modal for Adding New Code -->
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h3>Add Emergency Code</h3>
+        <form method="post" action="{{ url_for('add_code') }}">
+            <label>Code Name:</label>
+            <input type="text" name="code_name" required><br><br>
+            <label>Description:</label>
+            <input type="text" name="description"><br><br>
+            <label>Color (#hex):</label>
+            <input type="text" name="color" value="#e74c3c" required><br><br>
+            <button type="submit">Add Code</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Handle modal
+    function openModal() {
+        document.getElementById("addModal").style.display = "block";
+    }
+
+    function closeModal() {
+        document.getElementById("addModal").style.display = "none";
+    }
+
+    // Set hidden color input based on selected option
+    const codeSelect = document.getElementById('code');
+    const colorInput = document.getElementById('color');
+    codeSelect.addEventListener('change', function () {
+        const selectedOption = this.options[this.selectedIndex];
+        colorInput.value = selectedOption.dataset.color || '#ccc';
+    });
+</script>
+{% endblock %}

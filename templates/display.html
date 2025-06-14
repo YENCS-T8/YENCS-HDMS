@@ -1,0 +1,400 @@
+{% extends "layout.html" %} 
+{% block content %}
+    <style>
+        /* Your existing CSS styles (display-card, form-group, etc.) */
+        .display-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px #e3e3e3;
+            padding: 32px 36px;
+            max-width: 1000px;
+            margin: 40px auto;
+        }
+        .display-card h1 {
+            color: #2980b9;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .display-card .form-group {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background-color: #fcfcfc;
+        }
+        .display-card .form-group h3 {
+            width: 100%;
+            text-align: center;
+            color: #34495e;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .display-card form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+        }
+        .display-card label {
+            font-weight: bold;
+            color: #555;
+            flex-shrink: 0;
+        }
+        .display-card textarea, 
+        .display-card input[type="text"], 
+        .display-card input[type="number"], 
+        .display-card select {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-width: 150px;
+            flex-grow: 1;
+            font-size: 1em;
+        }
+        .display-card textarea {
+            min-height: 40px;
+        }
+        .display-card button {
+            background: #2980b9;
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .display-card button:hover {
+            background: #c0392b;
+        }
+        .display-card .btn-emergency {
+            background: #e74c3c;
+        }
+        .display-card .btn-emergency:hover {
+            background: #c0392b;
+        }
+        .display-card .btn-clear {
+            background: #f39c12;
+        }
+        .display-card .btn-clear:hover {
+            background: #e67e22;
+        }
+
+
+        /* Screen Status and Links */
+        .screens-flex {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            justify-content: center;
+            margin-bottom: 32px;
+        }
+        .screen-link-card {
+            border-radius: 10px;
+            box-shadow: 0 1px 6px #e3e3e3;
+            padding: 18px 20px;
+            min-width: 160px;
+            max-width: 180px;
+            text-align: center;
+            flex: 1 1 160px;
+            margin-bottom: 10px;
+            color: #fff !important;
+            font-weight: bold;
+            text-decoration: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: background 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+        .screen-link-card.online { background: #27ae60; }
+        .screen-link-card.offline { background: #c0392b; }
+        .screen-link-card:hover {
+            box-shadow: 0 4px 16px #b0b0b0;
+            filter: brightness(0.95);
+            text-decoration: none;
+        }
+        .screen-link-card .screen-label {
+            font-size: 1.1em;
+            margin-bottom: 8px;
+        }
+        .screen-link-card .screen-status {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        .screen-link-card .current-content-preview {
+            font-size: 0.8em;
+            margin-top: 10px;
+            padding: 5px;
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 5px;
+            word-break: break-all;
+            max-height: 50px;
+            overflow: hidden;
+            line-height: 1.2;
+        }
+        .screen-link-card .current-content-preview.emergency {
+            background-color: #f0f4f8;
+            color: #c0392b;
+            font-weight: bold;
+        }
+        .screen-link-card .screen-ip {
+            font-size: 0.7em;
+            opacity: 0.8;
+            margin-top: 5px;
+            padding: 3px 6px;
+            background-color: rgba(0, 0, 0, 0.15);
+            border-radius: 3px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 10px;
+            color: #555;
+            text-decoration: none;
+            font-size: 1em;
+            background: #f0f4f8;
+            padding: 6px 16px;
+            border-radius: 4px;
+            transition: background 0.2s, color 0.2s;
+        }
+        .back-link:hover {
+            color: #fff;
+            background: #2980b9;
+            text-decoration: none;
+        }
+
+        /* Broadcast Messages List */
+        .display-card ul.broadcast-list {
+            max-height: 180px;
+            overflow-y: auto;
+            padding: 0;
+            margin: 0 0 20px 0;
+            list-style: none;
+        }
+        .display-card ul.broadcast-list li {
+            background: #f8f9fa;
+            margin-bottom: 10px;
+            padding: 12px 18px;
+            border-radius: 6px;
+            box-shadow: 0 1px 4px #eee;
+            color: #333;
+            word-wrap: break-word;
+        }
+        .display-card ul.broadcast-list li.emergency-log {
+            background-color: #fcecec;
+            border: 1px solid #e74c3c;
+            font-weight: bold;
+            color: #c0392b;
+        }
+        /* New: for message if no online displays */
+        .no-online-displays {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+            margin-top: 20px;
+        }
+
+
+        @media (max-width: 768px) {
+            .display-card {
+                padding: 20px;
+                margin: 20px auto;
+            }
+            .display-card form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .display-card textarea, 
+            .display-card input[type="text"], 
+            .display-card input[type="number"], 
+            .display-card select,
+            .display-card button {
+                width: 100%;
+                min-width: unset;
+                margin-left: 0;
+            }
+            .screens-flex {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .screen-link-card {
+                max-width: none;
+            }
+        }
+    </style>
+
+    <div class="display-card">
+        <h1>📺 Display/Broadcast Management</h1>
+
+        <div class="form-group">
+            <h3>Broadcast Message to All Screens</h3>
+            <form method="post">
+                <input type="hidden" name="action" value="broadcast_all">
+                <label for="broadcast_all_message">Message:</label>
+                <textarea id="broadcast_all_message" name="message_content" placeholder="Enter message for all displays"></textarea>
+                <button type="submit">Broadcast All</button>
+            </form>
+        </div>
+
+        <div class="form-group">
+            <h3>Send Content to Specific Online Screen</h3>
+            <form method="post">
+                <label for="action_select">Content Type:</label>
+                <select id="action_select" name="action" onchange="toggleMessageInput()">
+                    <option value="send_token">Token</option>
+                    <option value="display_doctor_info">Doctor Info</option>
+                </select>
+
+                <label for="screen_id_specific">To Screen:</label>
+                <select id="screen_id_specific" name="screen_id" required>
+                    {% set online_screens_exist = false %}
+                    {% for sid, details in display_screen_details.items() %}
+                        {% if details.status == 'ONLINE' %}
+                            <option value="{{ sid }}">Screen {{ sid }} ({{ details.ip }})</option>
+                            {% set online_screens_exist = true %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if not online_screens_exist %}
+                        <option value="" disabled selected>No online displays</option>
+                    {% endif %}
+                </select>
+
+                <label for="message_content_specific">Content:</label>
+                <input type="text" id="message_content_specific" name="message_content" placeholder="e.g., T-001 or Dr. Smith, Room 301" required>
+                
+                <button type="submit" {% if not online_screens_exist %}disabled{% endif %}>Send</button>
+            </form>
+            {% if not online_screens_exist %}
+                <p class="no-online-displays">No online displays to send specific content to.</p>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <h3>Emergency Alert (All Screens)</h3>
+            <form method="post">
+                <input type="hidden" name="action" value="emergency_alert">
+                <label for="emergency_message">Alert Message:</label>
+                <textarea id="emergency_message" name="message_content" placeholder="Urgent message for all screens (e.g., Evacuate building immediately!)" required></textarea>
+                <button type="submit" class="btn-emergency">ACTIVATE EMERGENCY</button>
+            </form>
+        </div>
+
+        <div class="form-group">
+            <h3>Clear Display Content & History</h3>
+            <form method="post" style="justify-content: space-around;">
+                <input type="hidden" name="action" value="clear_specific_display">
+                <label for="screen_id_clear">Clear Screen:</label>
+                <select id="screen_id_clear" name="screen_id" required>
+                    {% set online_screens_exist_for_clear = false %}
+                    {% for sid, details in display_screen_details.items() %}
+                        {% if details.status == 'ONLINE' %}
+                            <option value="{{ sid }}">Screen {{ sid }} ({{ details.ip }})</option>
+                        {% endif %}
+                    {% endfor %}
+                     {% if not online_screens_exist_for_clear %}
+                        <option value="" disabled selected>No online displays</option>
+                    {% endif %}
+                </select>
+                <button type="submit" class="btn-clear" {% if not online_screens_exist_for_clear %}disabled{% endif %}>Clear Specific</button>
+            </form>
+            {% if not online_screens_exist_for_clear %}
+                <p class="no-online-displays">No online displays to clear specific content from.</p>
+            {% endif %}
+
+            <form method="post" style="margin-top: 15px;">
+                <input type="hidden" name="action" value="clear_all_displays">
+                <button type="submit" class="btn-clear">Clear All Displays</button>
+            </form>
+
+            <form method="post" style="margin-top: 15px;">
+                <input type="hidden" name="action" value="clear_broadcast_history">
+                <button type="submit" class="btn-clear">Clear Broadcast History Log</button>
+            </form>
+        </div>
+
+        <h2>Display Status and Control</h2>
+        <div class="screens-flex">
+            {% set any_display_online = false %}
+            {% for sid, details in display_screen_details.items() %}
+                {% set status = details.status %}
+                {% if status == 'ONLINE' %}
+                    {% set any_display_online = true %}
+                {% endif %}
+                {% set current_content = display_content_state.get(sid, {'type': 'none', 'content': 'N/A'}) %}
+                {% set screen_ip = details.ip %}
+                {% set last_seen_str = "N/A" %}
+                {% if details.last_seen %}
+                    {# You can format this more nicely if needed, e.g., using a custom filter or JS tooltip #}
+                    {% set last_seen_seconds_ago = (current_time - details.last_seen).total_seconds() | int %}
+                    {% if last_seen_seconds_ago < 60 %}
+                        {% set last_seen_str = last_seen_seconds_ago ~ "s ago" %}
+                    {% else %}
+                        {% set last_seen_str = details.last_seen.strftime('%H:%M:%S') %}
+                    {% endif %}
+                {% endif %}
+
+                <div class="screen-link-card {{ 'online' if status == 'ONLINE' else 'offline' }}">
+                    <div class="screen-label">Screen {{ sid }}</div>
+                    <div class="screen-status">{{ status }}</div>
+                    <div class="screen-ip">IP: {{ screen_ip }}</div>
+                    {% if details.last_seen %}
+                        <div class="screen-last-seen" style="font-size:0.6em;opacity:0.7;">Last Seen: {{ last_seen_str }}</div>
+                    {% endif %}
+                    
+                    <div style="font-size:0.9em;opacity:0.8;margin-top:6px;">
+                        <a href="{{ url_for('toggle_screen', screen_id=sid) }}" style="color:inherit; text-decoration: underline;">Click to toggle status</a>
+                    </div>
+                    <div class="current-content-preview {{ 'emergency' if current_content.type == 'emergency' }}">
+                        Type: {{ current_content.type | capitalize }}<br>
+                        Content: {{ current_content.content | truncate(25) }}
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <a href="{{ url_for('display_client', display_id=sid) }}" target="_blank" class="btn-link" 
+                           style="background: rgba(255,255,255,0.3); color: #fff; padding: 5px 10px; border-radius: 5px; font-size: 0.8em;">
+                           Open Display
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+            {% if not any_display_online %}
+                <p class="no-online-displays">No displays are currently online. Open a display client to activate.</p>
+            {% endif %}
+        </div>
+
+        <h2>Broadcast Messages History</h2>
+        <ul class="broadcast-list">
+            {% for msg in broadcast_messages %}
+            <li class="{{ 'emergency-log' if msg.type == 'emergency' }}">
+                <strong>{{ msg.timestamp }}</strong> 
+                {% if msg.target == 'All' %}
+                    - <span style="font-style: italic;">To All Screens</span>:
+                {% else %}
+                    - <span style="font-style: italic;">To Screen {{ msg.target }}</span>:
+                {% endif %}
+                {{ msg.message }}
+            </li>
+            {% endfor %}
+            {% if not broadcast_messages %}
+            <li>No broadcast messages in history.</li>
+            {% endif %}
+        </ul>
+        <a class="back-link" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+    </div>
+
+    <script>
+        function toggleMessageInput() {
+            const actionSelect = document.getElementById('action_select');
+            const messageInput = document.getElementById('message_content_specific');
+            if (actionSelect.value === 'send_token') {
+                messageInput.placeholder = 'e.g., T-001 or 1234';
+                messageInput.type = 'text';
+            } else if (actionSelect.value === 'display_doctor_info') {
+                messageInput.placeholder = 'e.g., Dr. Smith, Room 301, Dept. X';
+                messageInput.type = 'text';
+            }
+        }
+        document.addEventListener('DOMContentLoaded', toggleMessageInput);
+    </script>
+{% endblock content %}

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Display Screen {{ display_id }}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f4f8;
+            color: #333;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        .display-container {
+            width: 90%;
+            max-width: 1200px;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            text-align: center;
+            background-color: #ffffff;
+            transition: background-color 0.5s ease-in-out;
+            position: relative; /* For the screen ID overlay */
+        }
+        .screen-id-overlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            font-size: 1.2em;
+            color: #ccc;
+            opacity: 0.5;
+            font-weight: bold;
+        }
+        h1#main-content {
+            font-size: 5em; /* Large for tokens/main message */
+            color: #2c3e50;
+            margin: 0;
+            line-height: 1.2;
+            white-space: pre-wrap; /* Preserve line breaks */
+            word-wrap: break-word; /* Break long words */
+            max-height: 70vh; /* Limit height for content */
+            overflow: hidden; /* Hide overflow if content is too large */
+        }
+        p#sub-content {
+            font-size: 2em;
+            color: #555;
+            margin-top: 20px;
+        }
+
+        /* Specific styles for content types */
+        .display-container.type-token h1 {
+            color: #3498db; /* Blue for tokens */
+            font-size: 8em;
+            letter-spacing: 5px;
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        }
+        .display-container.type-doctor h1 {
+            color: #27ae60; /* Green for doctor info */
+            font-size: 4em;
+        }
+        .display-container.type-emergency {
+            background-color: #e74c3c; /* Red background for emergency */
+            color: #fff;
+            animation: pulse 1s infinite alternate; /* Pulsing effect */
+        }
+        .display-container.type-emergency h1 {
+            color: #fff;
+            font-size: 6em;
+            text-transform: uppercase;
+            font-weight: bold;
+            animation: shake 0.82s cubic-bezier(.36,.07,.19,.97) both infinite; /* Shaking effect */
+            transform: translate3d(0, 0, 0);
+            backface-visibility: hidden;
+            perspective: 1000px;
+        }
+        .display-container.type-emergency p {
+            color: #fff;
+        }
+        /* Style for idle state */
+        .display-container.type-idle h1 {
+            color: #888; /* Muted color for idle */
+            font-size: 3em;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.02); }
+        }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="display-container" id="display-container">
+        <div class="screen-id-overlay">Display ID: {{ display_id }}</div>
+        <h1 id="main-content">Loading...</h1>
+        <p id="sub-content"></p>
+    </div>
+
+    <script>
+        const displayId = {{ display_id }};
+        const mainContentElement = document.getElementById('main-content');
+        const subContentElement = document.getElementById('sub-content');
+        const displayContainer = document.getElementById('display-container');
+
+        let lastContentType = '';
+        let lastContentValue = '';
+        let lastTimestamp = '';
+
+        async function fetchDisplayData() {
+            try {
+                const response = await fetch(`/get_display_data/${displayId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                if (data.type !== lastContentType || data.content !== lastContentValue || data.timestamp !== lastTimestamp) {
+                    lastContentType = data.type;
+                    lastContentValue = data.content;
+                    lastTimestamp = data.timestamp;
+
+                    // Reset classes and sub-content
+                    displayContainer.className = 'display-container'; // Reset classes
+                    subContentElement.textContent = ''; // Clear sub-content by default
+
+                    // Add type-specific class
+                    displayContainer.classList.add(`type-${data.type}`);
+
+                    switch (data.type) {
+                        case 'broadcast':
+                            mainContentElement.textContent = data.content;
+                            break;
+                        case 'token':
+                            mainContentElement.textContent = `Token: ${data.content}`;
+                            subContentElement.textContent = 'Please proceed to designated counter.';
+                            break;
+                        case 'doctor':
+                            mainContentElement.textContent = data.content;
+                            subContentElement.textContent = 'Doctor Information';
+                            break;
+                        case 'emergency':
+                            mainContentElement.textContent = `🚨 EMERGENCY ALERT 🚨\n${data.content}`;
+                            break;
+                        case 'idle': // Handle the new idle state
+                            mainContentElement.textContent = data.content;
+                            break;
+                        default:
+                            mainContentElement.textContent = 'No content available.';
+                            break;
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching display data:', error);
+                mainContentElement.textContent = 'Error: Could not load content.';
+                subContentElement.textContent = 'Please check network connection.';
+                displayContainer.classList.add('error');
+            }
+        }
+
+        fetchDisplayData();
+        setInterval(fetchDisplayData, 3000);
+    </script>
+</body>
+</html>

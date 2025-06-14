@@ -1,0 +1,28 @@
+{% extends "layout.html" %} 
+{% block content %}
+</head>
+<body>
+    <h1>🔔 Notifications</h1>
+    <form method="post">
+        <input type="text" name="message" placeholder="Notification message">
+        <select name="priority">
+            <option value="info">Info</option>
+            <option value="normal">Normal</option>
+            <option value="urgent">Urgent</option>
+        </select>
+        <input type="text" name="department" placeholder="Department (optional)">
+        <button type="submit">Add Notification</button>
+    </form>
+    <h2>Notification Queue</h2>
+    <ul>
+        {% for n in notifications %}
+        <li>
+            {{ n.message }} ({{ n.status }}) [{{ n.priority }}]
+            {% if n.status == 'pending' %}
+                <a href="{{ url_for('send_notification', notification_id=n.id) }}">Send</a>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+{% endblock %}
