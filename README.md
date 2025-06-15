@@ -124,6 +124,8 @@ On the admin system (the main control system connected to all screens):
 - The admin can start/stop casting to each monitor via the control panel (<http://localhost:5000>).
 - Displays can show desktop streams or custom visuals (e.g., token queues, emergency alerts, OT schedules).
 
+Screenshots are mentioned in README.docx file as well as uploaded in screenshot folder.
+
 
 YOUTUBE LINK: https://youtu.be/gcjzI2iQH_I
 
