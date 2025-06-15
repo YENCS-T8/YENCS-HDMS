@@ -1,7 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify,session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify,session,url_for
 from datetime import datetime
 import mysql.connector
 import config
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"
@@ -15,136 +17,148 @@ def get_db_connection():
         database=config.DB_NAME
     )
 
-# --- Data Initialization ---
-blood_data = {
-    'B001': {'type': 'A+', 'units': 25, 'critical': 10, 'status': 'Sufficient'},
-    'B002': {'type': 'A-', 'units': 5, 'critical': 5, 'status': 'Critical'},
-    'B003': {'type': 'B+', 'units': 18, 'critical': 10, 'status': 'Sufficient'},
-    'B004': {'type': 'B-', 'units': 2, 'critical': 5, 'status': 'Critical'},
-    'B005': {'type': 'AB+', 'units': 10, 'critical': 5, 'status': 'Sufficient'},
-    'B006': {'type': 'AB-', 'units': 1, 'critical': 3, 'status': 'Critical'},
-    'B007': {'type': 'O+', 'units': 30, 'critical': 10, 'status': 'Sufficient'},
-    'B008': {'type': 'O-', 'units': 4, 'critical': 5, 'status': 'Critical'}
-}
-departments = {
-    'D001': {'name': 'Cardiology', 'location': 'Block A, Floor 1'},
-    'D002': {'name': 'Orthopedics', 'location': 'Block B, Floor 2'},
-    'D003': {'name': 'OT', 'location': 'Block C, Floor G'},
-    'D004': {'name': 'General Medicine', 'location': 'Block A, Floor 2'}
-}
-token_queue = [
-    {'token_id': 101, 'dept_id': 'D001', 'patient': 'A. Kumar', 'status': 'Waiting'},
-    {'token_id': 102, 'dept_id': 'D001', 'patient': 'B. Reddy', 'status': 'Called'},
-    {'token_id': 205, 'dept_id': 'D002', 'patient': 'C. Fernandes', 'status': 'Waiting'},
-    {'token_id': 310, 'dept_id': 'D004', 'patient': 'D. Shetty', 'status': 'In Progress'}
-]
-emergency_alerts = [
-    {'id': 'E001', 'code': 'Code Blue', 'dept': 'OT', 'time': '2025-06-01 09:45 AM', 'status': 'Active'},
-    {'id': 'E002', 'code': 'Code Red', 'dept': 'Pharmacy', 'time': '2025-06-01 10:10 AM', 'status': 'Cleared'}
-]
-drug_inventory = {
-    'DR001': {'name': 'Paracetamol 500mg', 'stock': 120, 'reorder': 100, 'status': 'Available'},
-    'DR002': {'name': 'Amoxicillin 250mg', 'stock': 30, 'reorder': 50, 'status': 'Low Stock'},
-    'DR003': {'name': 'Insulin Injection', 'stock': 0, 'reorder': 20, 'status': 'Out of Stock'},
-    'DR004': {'name': 'ORS Sachet', 'stock': 300, 'reorder': 150, 'status': 'Available'}
-}
-ot_schedule = [
-    {'ot_id': 'OT1', 'surgeon': 'Dr. Sharma', 'procedure': 'Cardiac Surgery', 'time': '10:00 AM', 'status': 'In Progress'},
-    {'ot_id': 'OT2', 'surgeon': 'Dr. Patel', 'procedure': 'Orthopedic Surgery', 'time': '2:00 PM', 'status': 'Scheduled'},
-    {'ot_id': 'OT3', 'surgeon': 'Dr. Kumar', 'procedure': 'General Surgery', 'time': '4:00 PM', 'status': 'Available'}
-]
+
 activity_log = [
     f"{datetime.now().strftime('%H:%M:%S')} - System initialized",
     f"{datetime.now().strftime('%H:%M:%S')} - Blood bank data loaded",
     f"{datetime.now().strftime('%H:%M:%S')} - OT schedules updated",
     f"{datetime.now().strftime('%H:%M:%S')} - Patient queues synchronized"
 ]
-display_status = {i: 'ONLINE' for i in range(1, 74)}
-broadcast_messages = []
+
 notifications = []
+
+def role_required(allowed_roles):
+    def wrapper(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            print(f"User role: {session.get('role')}, allowed: {allowed_roles}")
+            if 'role' not in session or session['role'] not in allowed_roles:
+                return redirect(url_for('unauthorized'))  # Or return render_template('unauthorized.html')
+            return f(*args, **kwargs)
+        return decorated_function
+    return wrapper
+
+
+conn = get_db_connection()
+cursor = conn.cursor(dictionary=True)
+
+users = [
+    ('admin', 'admin123', 'admin'),
+    ('bloodstaff', 'blood123', 'blood_bank'),
+    ('receptionist1', 'recep123', 'receptionist'),
+    ('pharmacystaff', 'pharma123', 'pharmacy')
+]
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        uname = request.form['username']
+        pword = request.form['password']
+
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM users WHERE username = %s", (uname,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if user and user['password'] == pword:
+            session['username'] = user['username']
+            session['role'] = user['role']
+            flash('Login successful!')
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid username or password')
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
+
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You have been logged out.')
+    return redirect(url_for('login'))
+
+
 
 # --- Dashboard ---
 @app.route('/')
+@role_required(['admin', 'receptionist', 'blood_bank', 'pharmacy'])
 def dashboard():
+    user_role = session.get('role')
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    alerts = [] # Initialize alerts list
+    
+    alerts = []
+    stats = {}
+    notifications_data = []
+    activity_log_data = []
 
     try:
-        # --- Critical Alerts Section ---
+        # --- Critical Alerts (Admin & Relevant Roles) ---
+        if user_role in ['admin', 'blood_bank']:
+            cursor.execute("SELECT type, units, critical_level FROM blood_bank WHERE units < critical_level")
+            for b in cursor.fetchall():
+                status = "out of stock" if b['units'] == 0 else "critical"
+                alerts.append(f"🩸 Blood Alert: {b['type']} is {status} ({b['units']} / {b['critical_level']})")
 
-        # 1. Blood Bank Critical Alerts
-        cursor.execute("SELECT type, units, critical_level FROM blood_bank WHERE units < critical_level ORDER BY type ASC")
-        critical_bloods = cursor.fetchall()
-        for b in critical_bloods:
-            status_desc = "critical"
-            if b['units'] == 0:
-                status_desc = "out of stock"
-            alerts.append(
-                f"🩸 Blood Alert: {b['type']} is {status_desc} ({b['units']} of {b['critical_level']} units)"
-            )
+        if user_role in ['admin', 'pharmacy']:
+            cursor.execute("SELECT name, stock, reorder_level FROM pharmacy WHERE stock <= reorder_level")
+            for d in cursor.fetchall():
+                status = "out of stock" if d['stock'] == 0 else "low stock"
+                alerts.append(f"💊 Drug Alert: {d['name']} is {status} (Stock: {d['stock']} / Reorder: {d['reorder_level']})")
 
-        # 2. Pharmacy Low/Out of Stock Drug Alerts
-        # Assuming your drug inventory is managed in the 'pharmacy' table
-        cursor.execute("SELECT name, stock, reorder_level FROM pharmacy WHERE stock <= reorder_level ORDER BY name ASC")
-        low_stock_drugs = cursor.fetchall()
-        for d in low_stock_drugs:
-            status_desc = "low stock"
-            if d['stock'] == 0:
-                status_desc = "out of stock"
-            alerts.append(
-                f"💊 Pharmacy Alert: {d['name']} is {status_desc} (Current: {d['stock']}, Reorder: {d['reorder_level']})"
-            )
-
-        # 3. Emergency Alerts (as per your existing code)
-        cursor.execute("SELECT code, dept FROM emergency_alert WHERE status='Active'")
-        emergencies = cursor.fetchall()
-        for e in emergencies:
-            alerts.append(f"🚨 EMERGENCY: {e['code']} in {e['dept']}")
+        if user_role in ['admin', 'receptionist']:
+            cursor.execute("SELECT code, dept FROM emergency_alert WHERE status='Active'")
+            for e in cursor.fetchall():
+                alerts.append(f"🚨 EMERGENCY: {e['code']} in {e['dept']}")
 
         if not alerts:
             alerts.append("✅ No critical alerts at this time")
 
-        # --- Stats Section ---
-        # Fetch data for stats from the database
-        cursor.execute("SELECT COUNT(*) AS cnt FROM ot_schedule WHERE status='In Progress'") # Assuming ot_schedule for OT status
-        active_ots_count = cursor.fetchone()['cnt']
-        cursor.execute("SELECT COUNT(*) AS cnt FROM ot_schedule") # Assuming ot_schedule for total OTs
-        total_ots_count = cursor.fetchone()['cnt']
+        # --- Stats (Role-based) ---
+        if user_role in ['admin', 'receptionist']:
+            cursor.execute("SELECT COUNT(*) AS cnt FROM ot_schedule WHERE status='In Progress'")
+            active_ots = cursor.fetchone()['cnt']
+            cursor.execute("SELECT COUNT(*) AS cnt FROM ot_schedule")
+            total_ots = cursor.fetchone()['cnt']
+            stats['active_ots'] = f"{active_ots}/{total_ots}"
 
-        cursor.execute("SELECT COUNT(*) AS cnt FROM blood_bank WHERE units < critical_level")
-        critical_blood_count = cursor.fetchone()['cnt']
+            cursor.execute("SELECT COUNT(*) AS cnt FROM patient_queue WHERE status='Waiting'")
+            stats['patients_in_queue'] = cursor.fetchone()['cnt']
 
-        cursor.execute("SELECT COUNT(*) AS cnt FROM patient_queue WHERE status='Waiting'")
-        patients_in_queue_count = cursor.fetchone()['cnt']
+        if user_role in ['admin', 'blood_bank']:
+            cursor.execute("SELECT COUNT(*) AS cnt FROM blood_bank WHERE units < critical_level")
+            stats['critical_blood'] = cursor.fetchone()['cnt']
+            cursor.execute("SELECT SUM(units) AS total_units FROM blood_bank")
+            stats['total_units'] = cursor.fetchone()['total_units'] or 0
 
-        cursor.execute("SELECT COUNT(*) AS cnt FROM pharmacy WHERE stock <= reorder_level")
-        low_stock_drugs_count = cursor.fetchone()['cnt']
+        if user_role in ['admin', 'pharmacy']:
+            cursor.execute("SELECT COUNT(*) AS cnt FROM pharmacy WHERE stock <= reorder_level")
+            stats['low_stock_drugs'] = cursor.fetchone()['cnt']
+            cursor.execute("SELECT COUNT(*) AS cnt FROM pharmacy")
+            stats['total_medicines'] = cursor.fetchone()['cnt']
 
-        stats = {
-            "active_ots": f"{active_ots_count}/{total_ots_count}",
-            "critical_blood": critical_blood_count,
-            "patients_in_queue": patients_in_queue_count,
-            "low_stock_drugs": low_stock_drugs_count
-        }
+        # --- Notifications (Admin only) ---
+        if user_role == 'admin':
+            cursor.execute("SELECT message, status FROM notification ORDER BY id DESC LIMIT 10")
+            notifications_data = cursor.fetchall()
 
-        # --- Notifications Section ---
-        # Ensure 'notification' table exists with 'message' and 'status' columns
-        cursor.execute("SELECT message, status FROM notification ORDER BY id DESC LIMIT 10")
-        notifications_data = cursor.fetchall()
-
-        # --- Activity Log Section ---
-        cursor.execute("SELECT message, timestamp FROM activity_log ORDER BY timestamp DESC LIMIT 20")
-        activity_log_rows = cursor.fetchall()
-        activity_log_data = [
-            f"[{row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}] {row['message']}" 
-            for row in activity_log_rows
-        ]
+        # --- Activity Log (Admin only) ---
+        if user_role == 'admin':
+            cursor.execute("SELECT message, timestamp FROM activity_log ORDER BY timestamp DESC LIMIT 20")
+            rows = cursor.fetchall()
+            activity_log_data = [
+                f"[{row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}] {row['message']}" 
+                for row in rows
+            ]
 
     except Exception as e:
-        print(f"Dashboard data fetching error: {e}")
-        # Provide fallback data in case of database error
-        alerts = ["❌ Error loading dashboard alerts."]
+        print(f"Dashboard error: {e}")
+        alerts = ["❌ Error loading dashboard data."]
         stats = {
             "active_ots": "N/A", "critical_blood": "N/A",
             "patients_in_queue": "N/A", "low_stock_drugs": "N/A"
@@ -158,13 +172,14 @@ def dashboard():
     return render_template('dashboard.html',
         alerts=alerts,
         stats=stats,
+        notifications=notifications_data,
         activity_log=activity_log_data,
-        notifications=notifications_data
+        user_role=user_role
     )
-
 
 # --- Activity Log ---
 @app.route('/add_activity', methods=['POST'])
+@role_required(['admin', 'receptionist'])
 def add_activity():
     activity = request.form.get('activity')
     if activity:
@@ -174,8 +189,11 @@ def add_activity():
             activity_log[:] = activity_log[-50:]
     return redirect(url_for('dashboard'))
 
+
+
 # --- Emergency Management ---
 @app.route('/emergency', methods=['GET', 'POST'])
+@role_required(['admin', 'receptionist'])
 def emergency():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -206,6 +224,7 @@ def emergency():
 
 
 @app.route('/clear_emergency/<int:alert_id>')
+@role_required(['admin', 'receptionist'])
 def clear_emergency(alert_id):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -215,6 +234,7 @@ def clear_emergency(alert_id):
     return redirect(url_for('emergency'))
 
 @app.route('/emergency_block_ot')
+@role_required(['admin', 'receptionist'])
 def emergency_block_ot():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -225,6 +245,7 @@ def emergency_block_ot():
 
 
 @app.route('/add_code', methods=['POST'])
+@role_required(['admin', 'receptionist'])
 def add_code():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -244,6 +265,7 @@ def add_code():
 
 # -------------------- OT Dashboard --------------------
 @app.route('/ot')
+@role_required(['admin', 'receptionist'])
 def ot():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -289,6 +311,7 @@ def ot():
 
 # -------------------- Add Patient to OT Queue --------------------
 @app.route('/add_ot_patient', methods=['POST'])
+@role_required(['admin', 'receptionist'])
 def add_ot_patient():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -328,6 +351,7 @@ def add_ot_patient():
 
 # -------------------- Update OT Schedule Status --------------------
 @app.route('/update_ot_status/<int:schedule_id>', methods=['POST'])
+@role_required(['admin', 'receptionist'])
 def update_ot_status(schedule_id):
     new_status = request.form.get('new_status')
     conn = get_db_connection()
@@ -342,6 +366,7 @@ def update_ot_status(schedule_id):
 
 # -------------------- Update Token Status --------------------
 @app.route('/update_token_status/<int:token_number>', methods=['POST'])
+@role_required(['admin', 'receptionist'])
 def update_token_status(token_number):
     new_status = request.form.get('new_status')
 
@@ -398,6 +423,7 @@ def update_token_status(token_number):
 
 
 @app.route('/schedule_ot', methods=['POST'])
+@role_required(['admin', 'receptionist'])
 def schedule_ot():
     patient_name = request.form['patient_name']
     surgeon_name = request.form['surgeon_name']
@@ -427,6 +453,7 @@ def schedule_ot():
 
 # -------------------- AJAX Refresh for Token Queue --------------------
 @app.route('/get_ot_tokens')
+@role_required(['admin', 'receptionist'])
 def get_ot_tokens():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -458,6 +485,7 @@ def get_ot_tokens():
 
 # ---------------------- Consultation Schedule ----------------------
 @app.route('/consultation_schedule', methods=['GET', 'POST'])
+@role_required(['admin', 'receptionist'])
 def consultation_schedule():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -487,6 +515,7 @@ def consultation_schedule():
 # --- Blood Bank ---
 # Route for blood bank
 @app.route('/blood', methods=['GET', 'POST'])
+@role_required(['admin', 'blood_bank', 'receptionist'])
 def blood():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -521,6 +550,7 @@ def blood():
 
 # Route to issue blood
 @app.route('/issue_blood/<int:blood_id>')
+@role_required(['admin', 'blood_bank', 'receptionist'])
 def issue_blood(blood_id):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -537,6 +567,7 @@ def issue_blood(blood_id):
 
 # Route to send critical alert (already exists, but enhance its message)
 @app.route('/blood_critical_alert')
+@role_required(['admin', 'blood_bank', 'receptionist'])
 def blood_critical_alert():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -580,6 +611,7 @@ def blood_critical_alert():
 # In your app.py
 # Add this new route for adding specific blood stock
 @app.route('/add_specific_blood_stock', methods=['POST'])
+@role_required(['admin', 'blood_bank','receptionist'])
 def add_specific_blood_stock():
     blood_id = request.form.get('blood_id')
     units_to_add = request.form.get('units_to_add', type=int) # Note: changed name to match new form field
@@ -632,6 +664,7 @@ def log_activity(message):
 
 # Add this new route for adding specific drug stock
 @app.route('/add_specific_drug_stock', methods=['POST'])
+@role_required(['admin', 'pharmacy'])
 def add_specific_drug_stock():
     drug_id = request.form.get('drug_id')
     units_to_add = request.form.get('units_to_add', type=int)
@@ -663,6 +696,7 @@ def add_specific_drug_stock():
 
 # Modify the existing '/pharmacy' route to differentiate POST requests
 @app.route('/pharmacy', methods=['GET', 'POST'])
+@role_required(['admin', 'pharmacy'])
 def pharmacy():
     conn = None
     cursor = None
@@ -771,6 +805,7 @@ def log_activity(message):
 
 # Add this new route to your app.py, for example, below the add_specific_drug_stock route
 @app.route('/add_medicine', methods=['POST'])
+@role_required(['admin', 'pharmacy'])
 def add_medicine():
     # Retrieve data from the form
     name = request.form.get('name').strip()
@@ -819,6 +854,7 @@ def add_medicine():
 
 # Route to generate drug order
 @app.route('/generate_drug_order', methods=['GET']) # Changed to GET, as it's typically just viewing a report
+@role_required(['admin', 'pharmacy'])
 def generate_drug_order():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -864,6 +900,7 @@ def generate_drug_order():
 
 # Route to send alert for low stock drugs (already exists, but can be enhanced)
 @app.route('/drug_low_stock_alert')
+@role_required(['admin', 'pharmacy'])
 def drug_low_stock_alert():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -899,6 +936,7 @@ def drug_low_stock_alert():
 
 # --- New Route: Search Drugs (for AJAX) ---
 @app.route('/search_drugs')
+@role_required(['admin', 'pharmacy'])
 def search_drugs():
     query = request.args.get('q', '').strip()
     conn = get_db_connection()
@@ -922,6 +960,7 @@ def search_drugs():
 
 # --- Modified Route: Issue Drug ---
 @app.route('/issue_drug', methods=['GET', 'POST'])
+@role_required([ 'pharmacy'])
 def issue_drug():
     print("DEBUG: Entered issue_drug function.") # Debug print
     conn = None   # Initialize connection to None
@@ -1026,6 +1065,7 @@ def issue_drug():
 
 # Route for Queue Management
 @app.route('/queue', methods=['GET', 'POST'])
+@role_required(['admin'])
 def queue():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1060,6 +1100,7 @@ def queue():
 
 # Route to call next patient
 @app.route('/call_next_patient')
+@role_required(['admin'])
 def call_next_patient():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1077,6 +1118,7 @@ def call_next_patient():
 
 # Route to bulk update statuses (example: mark all as completed)
 @app.route('/update_queue_status')
+@role_required(['admin'])
 def update_queue_status():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1117,6 +1159,7 @@ broadcast_messages_history = []
 # --- Flask Routes for Display Management ---
 
 @app.route('/display', methods=['GET', 'POST'])
+@role_required(['admin'])
 def display():
     current_time = datetime.now() # Still need current_time for last_seen formatting
 
@@ -1220,6 +1263,7 @@ def display():
 
 # --- Route for Display Clients to Retrieve Their Content ---
 @app.route('/display_client/<int:display_id>')
+@role_required(['admin'])
 def display_client(display_id):
     # ... (error checking) ...
     display_screen_details[display_id]['status'] = 'ONLINE'
@@ -1259,6 +1303,7 @@ def toggle_screen(screen_id):
 
 # --- Notifications ---
 @app.route('/notifications', methods=['GET', 'POST'])
+@role_required(['admin'])
 def notification_center():
     if request.method == 'POST':
         message = request.form.get('message')
@@ -1282,6 +1327,7 @@ def notification_center():
 
 
 @app.route('/notifications/send/<int:notification_id>')
+@role_required(['admin'])
 def send_notification(notification_id):
     for notification in notifications:
         if notification['id'] == notification_id:
@@ -1293,6 +1339,7 @@ def send_notification(notification_id):
 
 # --- Reports ---
 @app.route('/reports')
+@role_required(['admin'])
 def reports():
     ot_utilization = (sum(1 for ot in ot_schedule if ot['status'] == 'In Progress') / len(ot_schedule)) * 100 if ot_schedule else 0
     ot_utilization = round(ot_utilization, 2)  # Show only 2 decimal places
@@ -1319,6 +1366,11 @@ def reports():
         'emergency_alerts': emergency_count
     }
     return render_template('reports.html', report=report)
+
+
+@app.route('/unauthorized')
+def unauthorized():
+    return render_template('unauthorized.html'), 403
 
 
 

@@ -1,54 +1,86 @@
 #!/usr/bin/env python3
 """
 Enhanced LocalCast - Multi-Monitor Screen Casting Server
-Cast different screens to Monitor 1, Monitor 2, and Monitor 3 simultaneously
+Cast different webpages or screens to Monitor 1, Monitor 2, and Monitor 3
+- Admin computer controls three viewer computers via a web interface.
+- Supports rendering and streaming webpage content, desktop, or custom content.
+- Webpages are 'locked' to each viewer during casting.
 """
 
 import logging
 import sys
+import os
 from typing import Any, Dict, Optional
 from flask import Flask, render_template_string, jsonify, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
-import numpy as np
 import base64
 import threading
 import time
 import io
 from PIL import Image, ImageDraw, ImageFont
-import platform
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import WebDriverException, TimeoutException
 import socket
 import mss
 from datetime import datetime
 
-# Set up logging
+# Force unbuffered stdout to ensure logs appear in terminal
+sys.stdout.reconfigure(line_buffering=True)
+
+# Set up logging with file path and line number
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('localcast.log')
+    ],
+    force=True  # Ensure this config overrides any existing handlers
 )
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
+
+# Test logging immediately
+logger.debug("Logging test: DEBUG message - should appear in terminal and localcast.log")
+logger.info("Logging test: INFO message - should appear in terminal and localcast.log")
+logger.error("Logging test: ERROR message - should appear in terminal and localcast.log")
 
 # Check for required dependencies
 try:
     import flask_socketio
     import PIL
     import mss
+    import selenium
 except ImportError as e:
-    logger.error(f"Missing dependency: {e}. Please run: pip install flask flask-socketio pillow mss")
+    logger.error(f"Missing dependency: {e}. Please run: pip install flask flask-socketio pillow mss selenium")
     sys.exit(1)
 
-app = Flask(_name_)
+app = Flask(__name__)
 app.config['SECRET_KEY'] = 'localcast_secret_key'
-socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
+socketio = SocketIO(app, cors_allowed_origins="*", logger=False, engineio_logger=False)
 
 class MultiMonitorCaster:
-    def _init_(self):
+    def __init__(self):
         # Get number of available monitors
         with mss.mss() as sct:
-            monitor_count = len(sct.monitors) - 1  # Exclude the "all monitors" entry
-            logger.info(f"Detected {monitor_count} monitors")
+            self.monitor_count = len(sct.monitors) - 1
+            logger.info(f"Detected {self.monitor_count} monitors")
+        # Initialize Selenium WebDriver
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        try:
+            self.driver = webdriver.Chrome(options=chrome_options)
+            self.driver.set_window_size(1280, 720)  # Default resolution for webpage capture
+            logger.info("Selenium WebDriver initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize ChromeDriver: {e}")
+            logger.info("Ensure Chrome and ChromeDriver are installed and versions match.")
+            sys.exit(1)
         self.monitor_casters = {
             'monitor1': {
                 'id': '068243DF-2EE6-42C7-B358-D66BAD7FEF81',
@@ -56,11 +88,14 @@ class MultiMonitorCaster:
                 'quality': 80,
                 'fps': 30,
                 'scale': 1.0,
-                'source_monitor': 0,  # Primary monitor
+                'source_monitor': 0,
                 'cast_thread': None,
                 'frame_count': 0,
                 'connected_clients': set(),
-                'screen_content': 'desktop'
+                'screen_content': 'desktop',  # Options: desktop, custom, webpage
+                'webpage_url': None,
+                'last_webpage_image': None,
+                'last_webpage_update': 0,
             },
             'monitor2': {
                 'id': 'A75199C3-927D-43AF-B866-D5E45254D2FC',
@@ -68,11 +103,14 @@ class MultiMonitorCaster:
                 'quality': 80,
                 'fps': 30,
                 'scale': 1.0,
-                'source_monitor': 1 if monitor_count > 1 else 0,  # Second monitor if available
+                'source_monitor': 1 if self.monitor_count > 1 else 0,
                 'cast_thread': None,
                 'frame_count': 0,
                 'connected_clients': set(),
-                'screen_content': 'desktop'
+                'screen_content': 'webpage',
+                'webpage_url': None,
+                'last_webpage_image': None,
+                'last_webpage_update': 0,
             },
             'monitor3': {
                 'id': 'B8290E4F-1C3A-4B9E-AF12-7C8F9D3E6A7B',
@@ -80,11 +118,14 @@ class MultiMonitorCaster:
                 'quality': 80,
                 'fps': 30,
                 'scale': 1.0,
-                'source_monitor': 2 if monitor_count > 2 else 0,  # Third monitor if available
+                'source_monitor': 2 if self.monitor_count > 2 else 0,
                 'cast_thread': None,
                 'frame_count': 0,
                 'connected_clients': set(),
-                'screen_content': 'desktop'
+                'screen_content': 'webpage',
+                'webpage_url': None,
+                'last_webpage_image': None,
+                'last_webpage_update': 0,
             }
         }
 
@@ -100,24 +141,26 @@ class MultiMonitorCaster:
                         'left': monitor['left'],
                         'top': monitor['top']
                     }
-                    for i, monitor in enumerate(sct.monitors[1:], start=0)  # Start index at 0
+                    for i, monitor in enumerate(sct.monitors[1:], start=0)
                 ]
-                logger.info(f"Available monitors: {monitors}")
+                logger.debug(f"Available monitors: {monitors}")
                 return monitors
         except Exception as e:
             logger.error(f"Error getting monitors: {e}")
             return []
 
     def capture_screen(self, monitor_key):
-        """Capture screen for specific monitor"""
+        """Capture content for specific monitor"""
         try:
             monitor_config = self.monitor_casters[monitor_key]
             content_type = monitor_config['screen_content']
-            logger.info(f"Capturing {content_type} for {monitor_key} (source_monitor: {monitor_config['source_monitor']})")
+            logger.debug(f"Capturing {content_type} for {monitor_key}")
             if content_type == 'desktop':
                 return self._capture_desktop(monitor_config, monitor_key)
             elif content_type == 'custom':
                 return self._capture_custom_content(monitor_config, monitor_key)
+            elif content_type == 'webpage':
+                return self._capture_webpage_content(monitor_config, monitor_key)
         except Exception as e:
             logger.error(f"Screen capture error for {monitor_key}: {e}")
             return None
@@ -130,8 +173,7 @@ class MultiMonitorCaster:
                 if monitor_idx >= len(sct.monitors) - 1:
                     logger.warning(f"Invalid monitor index {monitor_idx} for {monitor_key}, falling back to 0")
                     monitor_idx = 0
-                monitor = sct.monitors[monitor_idx + 1]  # Adjust for mss indexing
-                logger.info(f"Capturing desktop monitor {monitor_idx} for {monitor_key}")
+                monitor = sct.monitors[monitor_idx + 1]
                 screenshot = sct.grab(monitor)
                 img = Image.frombytes('RGB', screenshot.size, screenshot.rgb, 'raw', 'RGB')
                 if config['scale'] != 1.0:
@@ -143,44 +185,94 @@ class MultiMonitorCaster:
             return None
 
     def _capture_custom_content(self, config, monitor_key):
-        """Generate custom content for demonstration"""
+        """Generate custom content for demonstration or fallback"""
         try:
-            width, height = 800, 600
+            width, height = 1280, 720  # Match Selenium resolution
             img = Image.new('RGB', (width, height), color='black')
             draw = ImageDraw.Draw(img)
-            # Default font (use a larger size for visibility)
             try:
                 font = ImageFont.truetype("arial.ttf", 48)
             except:
                 font = ImageFont.load_default()
 
             if monitor_key == 'monitor1':
-                # Red gradient with text
                 for y in range(height):
                     for x in range(width):
                         red = int(255 * (x / width))
                         img.putpixel((x, y), (red, 0, 0))
-                draw.text((50, height//2), "Monitor 1", fill="white", font=font)
+                draw.text((50, height//2), "Monitor 1 - Fallback", fill="white", font=font)
             elif monitor_key == 'monitor2':
-                # Blue gradient with text
                 for y in range(height):
                     for x in range(width):
                         blue = int(255 * (x / width))
                         img.putpixel((x, y), (0, 0, blue))
-                draw.text((50, height//2), "Monitor 2", fill="white", font=font)
+                draw.text((50, height//2), "Monitor 2 - Fallback", fill="white", font=font)
             else:  # monitor3
-                # Green gradient with text
                 for y in range(height):
                     for x in range(width):
                         green = int(255 * (x / width))
                         img.putpixel((x, y), (0, green, 0))
-                draw.text((50, height//2), "Monitor 3", fill="white", font=font)
+                draw.text((50, height//2), "Monitor 3 - Fallback", fill="white", font=font)
 
-            logger.info(f"Generated custom content for {monitor_key}")
+            logger.debug(f"Generated custom content for {monitor_key}")
             return self._encode_image(img, config)
         except Exception as e:
             logger.error(f"Custom content error for {monitor_key}: {e}")
             return None
+
+    def _capture_webpage_content(self, config, monitor_key):
+        """Capture webpage content using Selenium"""
+        try:
+            url = config.get('webpage_url')
+            if not url or not url.startswith(('http://', 'https://')):
+                logger.error(f"Invalid webpage URL for {monitor_key}: {url}")
+                return self._capture_custom_content(config, monitor_key)
+
+            # Use cached image if not enough time has passed
+            current_time = time.time()
+            if current_time - config['last_webpage_update'] < 5 and config['last_webpage_image']:
+                logger.debug(f"Using cached webpage image for {monitor_key}: {url}")
+                return config['last_webpage_image']
+
+            # Navigate to the webpage
+            logger.info(f"Loading webpage for {monitor_key}: {url}")
+            try:
+                self.driver.get(url)
+                # Wait for the page to load (up to 10 seconds)
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+                logger.info(f"Webpage loaded successfully for {monitor_key}: {url}")
+            except TimeoutException:
+                logger.error(f"Timeout while loading webpage for {monitor_key}: {url}")
+                return self._capture_custom_content(config, monitor_key)
+            except WebDriverException as e:
+                logger.error(f"WebDriver error while loading webpage for {monitor_key}: {url}, {str(e)}")
+                return self._capture_custom_content(config, monitor_key)
+
+            # Capture screenshot
+            try:
+                screenshot = self.driver.get_screenshot_as_png()
+                img = Image.open(io.BytesIO(screenshot)).convert('RGB')
+                logger.info(f"Screenshot captured for {monitor_key}: {url}")
+            except Exception as e:
+                logger.error(f"Failed to capture screenshot for {monitor_key}: {url}, {str(e)}")
+                return self._capture_custom_content(config, monitor_key)
+
+            # Resize if needed
+            if config['scale'] != 1.0:
+                new_size = (int(img.width * config['scale']), int(img.height * config['scale']))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+            # Encode and cache the image
+            encoded_img = self._encode_image(img, config)
+            config['last_webpage_image'] = encoded_img
+            config['last_webpage_update'] = current_time
+            logger.debug(f"Captured and encoded webpage for {monitor_key}: {url}")
+            return encoded_img
+        except Exception as e:
+            logger.error(f"Unexpected error in webpage capture for {monitor_key}: {e}")
+            return self._capture_custom_content(config, monitor_key)
 
     def _encode_image(self, img, config):
         """Encode image to base64"""
@@ -221,11 +313,14 @@ class MultiMonitorCaster:
                             frame_data['monitor'] = monitor_key
                             config['frame_count'] += 1
                             socketio.emit('screen_frame', frame_data, room=f'monitor_{monitor_key}')
+                        else:
+                            logger.warning(f"No frame data captured for {monitor_key}")
                         time.sleep(1.0 / config['fps'])
                     except Exception as e:
                         logger.error(f"Cast loop error for {monitor_key}: {e}")
                         break
                 config['is_casting'] = False
+                config['last_webpage_image'] = None
                 logger.info(f"Casting stopped for {monitor_key}")
 
             if not config['cast_thread'] or not config['cast_thread'].is_alive():
@@ -244,6 +339,7 @@ class MultiMonitorCaster:
         try:
             if monitor_key in self.monitor_casters:
                 self.monitor_casters[monitor_key]['is_casting'] = False
+                self.monitor_casters[monitor_key]['last_webpage_image'] = None
                 logger.info(f"Stopped casting for {monitor_key}")
         except Exception as e:
             logger.error(f"Error stopping casting for {monitor_key}: {e}")
@@ -278,6 +374,14 @@ class MultiMonitorCaster:
         except Exception as e:
             logger.error(f"Error removing client from {monitor_key}: {e}")
 
+    def cleanup(self):
+        """Clean up resources on shutdown"""
+        try:
+            self.driver.quit()
+            logger.info("Selenium WebDriver closed")
+        except Exception as e:
+            logger.error(f"Error closing WebDriver: {e}")
+
 caster = MultiMonitorCaster()
 
 def get_local_ip():
@@ -296,6 +400,7 @@ def get_local_ip():
 @app.route('/')
 def home():
     try:
+        logger.info("Accessing control panel at /")
         return render_template_string('''
 <!DOCTYPE html>
 <html>
@@ -394,7 +499,6 @@ def home():
         
         .btn-primary { background: linear-gradient(45deg, #4CAF50, #45a049); color: white; }
         .btn-danger { background: linear-gradient(45deg, #f44336, #d32f2f); color: white; }
-        .btn-secondary { background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); }
         
         button:hover {
             transform: translateY(-2px);
@@ -464,7 +568,7 @@ def home():
 <body>
     <div class="header">
         <h1>🖥 Enhanced LocalCast</h1>
-        <p>Multi-Monitor Screen Casting - Cast different content to Monitor 1, Monitor 2, and Monitor 3</p>
+        <p>Multi-Monitor Screen Casting - Cast different webpages or screens to Monitor 1, Monitor 2, and Monitor 3</p>
     </div>
     
     <div class="monitor-grid">
@@ -485,8 +589,9 @@ def home():
                 <div class="control-group">
                     <label>Content Source</label>
                     <select id="content1">
-                        <option value="desktop" selected>Desktop</option>
+                        <option value="desktop">Desktop</option>
                         <option value="custom">Custom Screen</option>
+                        <option value="webpage" selected>Webpage</option>
                     </select>
                 </div>
                 
@@ -495,6 +600,11 @@ def home():
                     <select id="source-monitor1">
                         <option value="0">Primary Monitor</option>
                     </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>Webpage URL</label>
+                    <input type="text" id="webpage-url1" placeholder="e.g., https://example.com">
                 </div>
                 
                 <div class="control-group">
@@ -557,8 +667,9 @@ def home():
                 <div class="control-group">
                     <label>Content Source</label>
                     <select id="content2">
-                        <option value="desktop" selected>Desktop</option>
+                        <option value="desktop">Desktop</option>
                         <option value="custom">Custom Screen</option>
+                        <option value="webpage" selected>Webpage</option>
                     </select>
                 </div>
                 
@@ -567,6 +678,11 @@ def home():
                     <select id="source-monitor2">
                         <option value="0">Primary Monitor</option>
                     </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>Webpage URL</label>
+                    <input type="text" id="webpage-url2" placeholder="e.g., https://news.com">
                 </div>
                 
                 <div class="control-group">
@@ -629,8 +745,9 @@ def home():
                 <div class="control-group">
                     <label>Content Source</label>
                     <select id="content3">
-                        <option value="desktop" selected>Desktop</option>
+                        <option value="desktop">Desktop</option>
                         <option value="custom">Custom Screen</option>
+                        <option value="webpage" selected>Webpage</option>
                     </select>
                 </div>
                 
@@ -639,6 +756,11 @@ def home():
                     <select id="source-monitor3">
                         <option value="0">Primary Monitor</option>
                     </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>Webpage URL</label>
+                    <input type="text" id="webpage-url3" placeholder="e.g., https://wikipedia.org">
                 </div>
                 
                 <div class="control-group">
@@ -702,59 +824,72 @@ def home():
         const monitors = ['monitor1', 'monitor2', 'monitor3'];
         
         monitors.forEach(monitor => {
-            socket.on(screen_frame, (data) => {
+            const num = monitor.slice(-1);
+            
+            socket.on('screen_frame', (data) => {
                 if (data.monitor === monitor) {
-                    const preview = document.getElementById(preview${monitor.slice(-1)});
-                    const noPreview = document.getElementById(no-preview${monitor.slice(-1)});
+                    const preview = document.getElementById(`preview${num}`);
+                    const noPreview = document.getElementById(`no-preview${num}`);
                     preview.src = data.image;
                     preview.style.display = 'block';
                     noPreview.style.display = 'none';
-                    document.getElementById(frames${monitor.slice(-1)}).textContent = 
-                        parseInt(document.getElementById(frames${monitor.slice(-1)}).textContent) + 1;
+                    document.getElementById(`frames${num}`).textContent = 
+                        parseInt(document.getElementById(`frames${num}`).textContent) + 1;
                 }
             });
             
-            socket.on(client_count_${monitor}, (count) => {
-                document.getElementById(clients${monitor.slice(-1)}).textContent = count;
+            socket.on(`client_count_${monitor}`, (count) => {
+                document.getElementById(`clients${num}`).textContent = count;
             });
-        });
-        
-        monitors.forEach(monitor => {
-            const num = monitor.slice(-1);
             
-            document.getElementById(start${num}).addEventListener('click', () => {
+            socket.on('cast_status', (status) => {
+                if (status.monitor === monitor) {
+                    if (status.is_casting) {
+                        document.getElementById(`status${num}`).textContent = 'Active';
+                        document.getElementById(`status${num}`).className = 'monitor-status status-active';
+                    } else {
+                        document.getElementById(`status${num}`).textContent = 'Inactive';
+                        document.getElementById(`status${num}`).className = 'monitor-status status-inactive';
+                        document.getElementById(`preview${num}`).style.display = 'none';
+                        document.getElementById(`no-preview${num}`).style.display = 'block';
+                    }
+                }
+            });
+            
+            document.getElementById(`start${num}`).addEventListener('click', () => {
                 const settings = {
-                    quality: parseInt(document.getElementById(quality${num}).value),
-                    fps: parseInt(document.getElementById(fps-select${num}).value),
-                    scale: parseFloat(document.getElementById(scale${num}).value),
-                    source_monitor: parseInt(document.getElementById(source-monitor${num}).value),
-                    screen_content: document.getElementById(content${num}).value
+                    quality: parseInt(document.getElementById(`quality${num}`).value),
+                    fps: parseInt(document.getElementById(`fps-select${num}`).value),
+                    scale: parseFloat(document.getElementById(`scale${num}`).value),
+                    source_monitor: parseInt(document.getElementById(`source-monitor${num}`).value),
+                    screen_content: document.getElementById(`content${num}`).value,
+                    webpage_url: document.getElementById(`webpage-url${num}`).value
                 };
                 
                 socket.emit('start_cast', { monitor, settings });
                 socket.emit('join_monitor', monitor);
                 
-                document.getElementById(start${num}).disabled = true;
-                document.getElementById(stop${num}).disabled = false;
-                document.getElementById(status${num}).textContent = 'Active';
-                document.getElementById(status${num}).className = 'monitor-status status-active';
+                document.getElementById(`start${num}`).disabled = true;
+                document.getElementById(`stop${num}`).disabled = false;
+                document.getElementById(`status${num}`).textContent = 'Active';
+                document.getElementById(`status${num}`).className = 'monitor-status status-active';
             });
             
-            document.getElementById(stop${num}).addEventListener('click', () => {
+            document.getElementById(`stop${num}`).addEventListener('click', () => {
                 socket.emit('stop_cast', monitor);
                 socket.emit('leave_monitor', monitor);
                 
-                document.getElementById(start${num}).disabled = false;
-                document.getElementById(stop${num}).disabled = true;
-                document.getElementById(status${num}).textContent = 'Inactive';
-                document.getElementById(status${num}).className = 'monitor-status status-inactive';
+                document.getElementById(`start${num}`).disabled = false;
+                document.getElementById(`stop${num}`).disabled = true;
+                document.getElementById(`status${num}`).textContent = 'Inactive';
+                document.getElementById(`status${num}`).className = 'monitor-status status-inactive';
                 
-                document.getElementById(preview${num}).style.display = 'none';
-                document.getElementById(no-preview${num}).style.display = 'block';
+                document.getElementById(`preview${num}`).style.display = 'none';
+                document.getElementById(`no-preview${num}`).style.display = 'block';
             });
             
-            document.getElementById(quality${num}).addEventListener('input', (e) => {
-                document.getElementById(quality-display${num}).textContent = e.target.value + '%';
+            document.getElementById(`quality${num}`).addEventListener('input', (e) => {
+                document.getElementById(`quality-display${num}`).textContent = e.target.value + '%';
             });
         });
         
@@ -763,14 +898,13 @@ def home():
                 .then(response => response.json())
                 .then(monitors => {
                     ['1', '2', '3'].forEach(num => {
-                        const select = document.getElementById(source-monitor${num});
+                        const select = document.getElementById(`source-monitor${num}`);
                         select.innerHTML = '';
                         monitors.forEach((monitor, index) => {
                             const option = document.createElement('option');
                             option.value = monitor.id;
-                            option.textContent = Monitor ${monitor.id} (${monitor.width}x${monitor.height});
+                            option.textContent = `Monitor ${monitor.id} (${monitor.width}x${monitor.height})`;
                             select.appendChild(option);
-                            // Set default selection based on monitor number
                             if (num === '1' && index === 0) select.value = monitor.id;
                             if (num === '2' && index === 1) select.value = monitor.id;
                             if (num === '3' && index === 2) select.value = monitor.id;
@@ -786,10 +920,10 @@ def home():
                 .then(data => {
                     localIP = data.local_ip;
                     ['1', '2', '3'].forEach(num => {
-                        document.getElementById(viewer-url${num}-local).href = http://localhost:5000/viewer/monitor${num};
-                        document.getElementById(viewer-url${num}-local).textContent = http://localhost:5000/viewer/monitor${num};
-                        document.getElementById(viewer-url${num}-network).href = http://${localIP}:5000/viewer/monitor${num};
-                        document.getElementById(viewer-url${num}-network).textContent = http://${localIP}:5000/viewer/monitor${num};
+                        document.getElementById(`viewer-url${num}-local`).href = `http://localhost:5000/viewer/monitor${num}`;
+                        document.getElementById(`viewer-url${num}-local`).textContent = `http://localhost:5000/viewer/monitor${num}`;
+                        document.getElementById(`viewer-url${num}-network`).href = `http://${localIP}:5000/viewer/monitor${num}`;
+                        document.getElementById(`viewer-url${num}-network`).textContent = `http://${localIP}:5000/viewer/monitor${num}`;
                     });
                 })
                 .catch(error => console.error('Error updating network info:', error));
@@ -807,13 +941,14 @@ def viewer(monitor_key):
     try:
         if monitor_key not in ['monitor1', 'monitor2', 'monitor3']:
             logger.error(f"Invalid monitor key: {monitor_key}")
-            return "Invalid monitor", 404
+            return "Invalid monitor key. Please check the URL.", 404
         monitor_name = f"Monitor {monitor_key[-1]}"
         monitor_color = {
             'monitor1': '#ff6b6b',
             'monitor2': '#4ecdc4',
             'monitor3': '#a2e05b'
         }[monitor_key]
+        logger.info(f"Viewer accessed for {monitor_key}")
         return render_template_string(f'''
 <!DOCTYPE html>
 <html>
@@ -910,7 +1045,7 @@ def viewer(monitor_key):
         <div id="loading" class="loading">📡 Connecting to {monitor_name}...</div>
         <div id="no-signal" class="no-signal" style="display: none;">
             📺 No active cast on {monitor_name}<br>
-            <small>Start casting from the control panel</small>
+            <small>Start casting from the control panel or check logs for errors</small>
         </div>
     </div>
     
@@ -974,18 +1109,21 @@ def viewer(monitor_key):
                     lastFrameTime = now;
                 }}
                 
+                document.getElementById('quality-info').textContent = '{caster.monitor_casters[monitor_key]["quality"]}%';
             }}
         }});
         
         socket.on('cast_status', (status) => {{
-            if (!status.is_casting) {{
-                screenDisplay.style.display = 'none';
-                loadingDiv.style.display = 'none';
-                noSignalDiv.style.display = 'block';
-                document.getElementById('connection-status').textContent = 'No Active Cast';
-                document.getElementById('fps-counter').textContent = '0';
-            }} else {{
-                document.getElementById('connection-status').textContent = 'Active';
+            if (status.monitor === monitorKey) {{
+                if (!status.is_casting) {{
+                    screenDisplay.style.display = 'none';
+                    loadingDiv.style.display = 'none';
+                    noSignalDiv.style.display = 'block';
+                    document.getElementById('connection-status').textContent = 'No Active Cast';
+                    document.getElementById('fps-counter').textContent = '0';
+                }} else {{
+                    document.getElementById('connection-status').textContent = 'Active';
+                }}
             }}
         }});
         
@@ -1039,6 +1177,7 @@ def viewer(monitor_key):
 @app.route('/api/network-info')
 def network_info():
     try:
+        logger.info("Fetching network info")
         return jsonify({
             'local_ip': get_local_ip(),
             'port': 5000
@@ -1050,6 +1189,7 @@ def network_info():
 @app.route('/api/monitors')
 def api_monitors():
     try:
+        logger.info("Fetching available monitors")
         return jsonify(caster.get_monitors())
     except Exception as e:
         logger.error(f"Error in monitors route: {e}")
@@ -1063,7 +1203,7 @@ def handle_join_monitor(monitor_key):
             join_room(f'monitor_{monitor_key}')
             caster.add_client(monitor_key, client_id)
             emit('client_count_' + monitor_key, len(caster.monitor_casters[monitor_key]['connected_clients']), room=f'monitor_{monitor_key}')
-            emit('cast_status', {'is_casting': caster.monitor_casters[monitor_key]['is_casting']}, to=client_id)
+            emit('cast_status', {'is_casting': caster.monitor_casters[monitor_key]['is_casting'], 'monitor': monitor_key}, to=client_id)
             logger.info(f"Client {client_id} joined monitor {monitor_key}")
     except Exception as e:
         logger.error(f"Error in join_monitor for {monitor_key}: {e}")
@@ -1088,7 +1228,7 @@ def handle_start_cast(data):
             settings = data.get('settings', {})
             caster.update_settings(monitor_key, settings)
             if caster.start_casting(monitor_key):
-                emit('cast_status', {'is_casting': True}, room=f'monitor_{monitor_key}')
+                emit('cast_status', {'is_casting': True, 'monitor': monitor_key}, room=f'monitor_{monitor_key}')
     except Exception as e:
         logger.error(f"Error in start_cast for {monitor_key}: {e}")
 
@@ -1097,7 +1237,7 @@ def handle_stop_cast(monitor_key):
     try:
         if monitor_key in caster.monitor_casters:
             caster.stop_casting(monitor_key)
-            emit('cast_status', {'is_casting': False}, room=f'monitor_{monitor_key}')
+            emit('cast_status', {'is_casting': False, 'monitor': monitor_key}, room=f'monitor_{monitor_key}')
     except Exception as e:
         logger.error(f"Error in stop_cast for {monitor_key}: {e}")
 
@@ -1114,9 +1254,9 @@ def some_func():
         logger.error(f"Error in some_endpoint: {e}")
         return jsonify({'error': str(e)}), 500
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     local_ip = get_local_ip()
-    print("🖥  Enhanced LocalCast - Multi-Monitor Screen Casting Server")
+    print("🖥 Enhanced LocalCast - Multi-Monitor Screen Casting Server")
     print("=" * 70)
     print(f"🌐 Server starting on:")
     print(f"   • Local: http://localhost:5000")
@@ -1130,16 +1270,19 @@ if _name_ == '_main_':
     print(f"   • Monitor 3 Network: http://{local_ip}:5000/viewer/monitor3")
     print("=" * 70)
     print("\n📋 Setup Instructions:")
-    print("1. Install dependencies: pip install flask flask-socketio pillow mss")
-    print("2. Run the server: python app.py")
-    print("3. Open the control panel in your browser: http://localhost:5000")
-    print("4. Select different source monitors or content for each monitor")
-    print("5. Click 'Start Monitor 1', 'Start Monitor 2', or 'Start Monitor 3' to begin casting")
-    print("6. Access viewer URLs on other devices to view the streams")
+    print("1. Install dependencies: pip install flask flask-socketio pillow mss selenium")
+    print("2. Install Chrome and ChromeDriver (ensure versions match)")
+    print("3. Run the server: python -u localcast.py")
+    print("4. Open the control panel: http://localhost:5000")
+    print("5. For each monitor, select 'Webpage' and enter the URL (e.g., https://example.com)")
+    print("6. Click 'Start Monitor X' to lock and stream the webpage to the viewer")
+    print("7. Access viewer URLs on other devices to view the streams")
+    print("8. Check terminal and localcast.log for errors if webpages don't load")
+    print("   Logs now include file path and line number for easier debugging")
     print("\n🎯 Key Features:")
-    print("• Real-time multi-monitor streaming")
-    print("• Independent control for Monitors 1, 2, and 3")
-    print("• Support for desktop and custom content")
+    print("• Stream different webpages to Monitors 1, 2, and 3")
+    print("• Webpages are locked to each viewer during casting")
+    print("• Support for desktop, custom content, and webpage streaming")
     print("• Adjustable quality, FPS, and scaling")
     print("• Fullscreen viewer mode with controls")
     print("• Automatic network discovery")
@@ -1148,5 +1291,7 @@ if _name_ == '_main_':
         socketio.run(app, host='0.0.0.0', port=5000, debug=False)
     except KeyboardInterrupt:
         print("\nServer stopped by user.")
+        caster.cleanup()
     except Exception as e:
         logger.error(f"Server failed to start: {e}")
+        caster.cleanup()

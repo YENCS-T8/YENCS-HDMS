@@ -114,11 +114,11 @@
         <input type="number" id="units_to_add" name="units_to_add" min="1" value="1" required>
         <button type="submit">Add Units</button>
     </form>
-
+    
     <form method="post" action="{{ url_for('blood') }}">
         <button type="submit">Add 1 Unit to ALL Critical Types</button>
     </form>
-
+<a class="btn-link" href="{{ url_for('blood_critical_alert') }}">Send Critical Alert</a>
     <h2>Blood Inventory</h2>
     <table>
         <tr>
@@ -137,7 +137,7 @@
         </tr>
         {% endfor %}
     </table>
-    <a class="btn-link" href="{{ url_for('blood_critical_alert') }}">Send Critical Alert</a>
+    
     <br>
     <a class="back-link" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
 </div>

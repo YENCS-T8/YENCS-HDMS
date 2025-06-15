@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 <style>
+    /* Keep your existing styles unchanged here */
     .stats-flex {
         display: flex;
         flex-wrap: wrap;
@@ -71,54 +72,65 @@
     }
 </style>
 
-<!-- Dashboard Content -->
-<div class="stats-flex">
-    <div class="stat-card">
-        <h3>Active OTs</h3>
-        <div class="stat-value">{{ stats.active_ots }}</div>
+<!-- Role-Specific Dashboard -->
+{% if session['role'] == 'admin' %}
+    <!-- Full dashboard for admin -->
+    <div class="stats-flex">
+        <div class="stat-card"><h3>Active OTs</h3><div class="stat-value">{{ stats.active_ots }}</div></div>
+        <div class="stat-card"><h3>Critical Blood Types</h3><div class="stat-value">{{ stats.critical_blood }}</div></div>
+        <div class="stat-card"><h3>Patients in Queue</h3><div class="stat-value">{{ stats.patients_in_queue }}</div></div>
+        <div class="stat-card"><h3>Low Stock Drugs</h3><div class="stat-value">{{ stats.low_stock_drugs }}</div></div>
     </div>
-    <div class="stat-card">
-        <h3>Critical Blood Types</h3>
-        <div class="stat-value">{{ stats.critical_blood }}</div>
+    <div class="sections-flex">
+        <div class="section-card">
+            <h2>🚨 Critical Alerts</h2>
+            <ul>
+                {% for alert in alerts %}<li>{{ alert }}</li>{% endfor %}
+            </ul>
+        </div>
+        <div class="section-card">
+            <h2>🔔 Notifications</h2>
+            <ul>
+                {% for n in notifications %}
+                <li>{{ n.message }} <span style="color:#888;">({{ n.status }})</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="section-card">
+            <h2>📋 Recent Activity</h2>
+            <ul>
+                {% for activity in activity_log %}<li>{{ activity }}</li>{% endfor %}
+            </ul>
+            <form method="post" action="{{ url_for('add_activity') }}">
+                <input type="text" name="activity" placeholder="Add activity" required>
+                <button type="submit">Add</button>
+            </form>
+        </div>
     </div>
-    <div class="stat-card">
-        <h3>Patients in Queue</h3>
-        <div class="stat-value">{{ stats.patients_in_queue }}</div>
-    </div>
-    <div class="stat-card">
-        <h3>Low Stock Drugs</h3>
-        <div class="stat-value">{{ stats.low_stock_drugs }}</div>
-    </div>
-</div>
 
-<div class="sections-flex">
-    <div class="section-card">
-        <h2>🚨 Critical Alerts</h2>
-        <ul>
-            {% for alert in alerts %}
-            <li>{{ alert }}</li>
-            {% endfor %}
-        </ul>
+{% elif session['role'] == 'blood_bank' %}
+    <h2>🩸 Blood Bank Summary</h2>
+    <div class="stats-flex">
+        <div class="stat-card"><h3>Critical Blood Types</h3><div class="stat-value">{{ stats.critical_blood }}</div></div>
+        <div class="stat-card"><h3>Total Units</h3><div class="stat-value">{{ stats.total_units }}</div></div>
     </div>
     <div class="section-card">
-        <h2>🔔 Notifications</h2>
-        <ul>
-            {% for n in notifications %}
-            <li>{{ n.message }} <span style="color:#888;">({{ n.status }})</span></li>
-            {% endfor %}
-        </ul>
+        <h2>Alerts</h2>
+        <ul>{% for alert in alerts %}<li>{{ alert }}</li>{% endfor %}</ul>
     </div>
-    <div class="section-card">
-        <h2>📋 Recent Activity</h2>
-        <ul>
-            {% for activity in activity_log %}
-            <li>{{ activity }}</li>
-            {% endfor %}
-        </ul>
-        <form method="post" action="{{ url_for('add_activity') }}">
-            <input type="text" name="activity" placeholder="Add activity" required>
-            <button type="submit">Add</button>
-        </form>
+
+{% elif session['role'] == 'receptionist' %}
+    <h2>🏥 Reception Overview</h2>
+    <div class="stats-flex">
+        <div class="stat-card"><h3>Patients in Queue</h3><div class="stat-value">{{ stats.patients_in_queue }}</div></div>
+        <div class="stat-card"><h3>OT Bookings</h3><div class="stat-value">{{ stats.active_ots }}</div></div>
     </div>
-</div>
+
+{% elif session['role'] == 'pharmacy' %}
+    <h2>💊 Pharmacy Overview</h2>
+    <div class="stats-flex">
+        <div class="stat-card"><h3>Low Stock Drugs</h3><div class="stat-value">{{ stats.low_stock_drugs }}</div></div>
+        <div class="stat-card"><h3>Total Medicines</h3><div class="stat-value">{{ stats.total_medicines }}</div></div>
+    </div>
+{% endif %}
 {% endblock %}
