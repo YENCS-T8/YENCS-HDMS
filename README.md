@@ -124,6 +124,9 @@ On the admin system (the main control system connected to all screens):
 - The admin can start/stop casting to each monitor via the control panel (<http://localhost:5000>).
 - Displays can show desktop streams or custom visuals (e.g., token queues, emergency alerts, OT schedules).
 
+
+YOUTUBE LINK: https://youtu.be/gcjzI2iQH_I
+
 Notes
 
 •	The backend uses Flask.
