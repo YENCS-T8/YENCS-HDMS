@@ -58,6 +58,7 @@ Follow these steps to set up and run the hospital dashboard system on your local
 
 –	Create a database : hospital\_db
 
+- Import the hospital.sql file
 
 **–– Configure Environment Variables**
 
