@@ -31,9 +31,14 @@ def role_required(allowed_roles):
     def wrapper(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            print(f"User role: {session.get('role')}, allowed: {allowed_roles}")
-            if 'role' not in session or session['role'] not in allowed_roles:
-                return redirect(url_for('unauthorized'))  # Or return render_template('unauthorized.html')
+            # If not logged in, redirect to login
+            if 'username' not in session:
+                return redirect(url_for('login'))
+
+            # If logged in but not the correct role, redirect to unauthorized page
+            if session.get('role') not in allowed_roles:
+                return redirect(url_for('unauthorized'))
+
             return f(*args, **kwargs)
         return decorated_function
     return wrapper
